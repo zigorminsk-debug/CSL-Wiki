@@ -1,0 +1,10 @@
+{
+  "appId": "com.csl.wiki",
+  "appName": "CSL-Wiki",
+  "webDir": "public",
+  "plugins": {
+    "CapacitorHttp": {
+      "enabled": true
+    }
+  }
+}

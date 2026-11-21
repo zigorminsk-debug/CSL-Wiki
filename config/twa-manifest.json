@@ -1,0 +1,28 @@
+{
+  "packageId": "com.csl.wiki",
+  "host": "your-hosted-pwa.example",
+  "name": "CSL-Wiki",
+  "themeColor": "#0b3d91",
+  "navigationColor": "#0f1115",
+  "navigationColorDark": "#0f1115",
+  "navigationDividerColor": "#2a2f3a",
+  "navigationDividerColorDark": "#2a2f3a",
+  "backgroundColor": "#0f1115",
+  "enableNotifications": false,
+  "startUrl": "/index.html",
+  "iconUrl": "https://your-hosted-pwa.example/icons/icon.svg",
+  "maskableIconUrl": "https://your-hosted-pwa.example/icons/icon-maskable.svg",
+  "webManifestUrl": "https://your-hosted-pwa.example/manifest.webmanifest",
+  "fallbackType": "customtabs",
+  "features": {
+    "locationDelegation": { "enabled": false },
+    "orientation": { "default": "portrait", "maskable": false }
+  },
+  "minSdkVersion": 21,
+  "applicationId": "com.csl.wiki",
+  "display": "standalone",
+  "signingKey": {
+    "path": "./android-keystore.jks",
+    "alias": "csw-wiki"
+  }
+}

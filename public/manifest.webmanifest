@@ -1,0 +1,25 @@
+{
+  "name": "CSL-Wiki — Confluence Mobile",
+  "short_name": "CSL-Wiki",
+  "description": "Offline-capable Confluence wiki client with automatic sync and a wiki agent.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0f1115",
+  "theme_color": "#0b3d91",
+  "icons": [
+    {
+      "src": "./icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "./icons/icon-maskable.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}

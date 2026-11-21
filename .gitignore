@@ -1,0 +1,16 @@
+node_modules/
+*.log
+.DS_Store
+android-keystore.jks
+.env
+# Android native sources; never commit signing credentials or keys
+android/**/build/
+android/.gradle/
+android/local.properties
+
+*.p12
+*.jks
+*.keystore
+
+# Downloaded CI deliverables
+artifacts/
