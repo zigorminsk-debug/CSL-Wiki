@@ -34,5 +34,8 @@ export const CONFIG = {
   AGENT_API_KEY: '',
   AGENT_MODEL: 'gpt-4o-mini',
 
+  // Auto-update: which GitHub repo's Releases to watch.
+  UPDATE_REPO: 'zigorminsk-debug/CSL-Wiki',
+
   CACHE_VERSION: 'csl-wiki-v1'
 };

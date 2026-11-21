@@ -49,6 +49,14 @@ jobs:
       - name: Install JS dependencies
         run: npm install
 
+      - name: Write app version (baked into the build for update checks)
+        run: |
+          VERSION_CODE=${{ github.run_number }}
+          if [ "${{ github.ref_type }}" = "tag" ]; then TAG="${{ github.ref_name }}"; else TAG="0.0.$VERSION_CODE"; fi
+          VERSION="${TAG#v}"
+          printf '{"version":"%s","versionCode":%s}' "$VERSION" "$VERSION_CODE" > public/version.json
+          echo "App version set to $VERSION (code $VERSION_CODE)"
+
       - name: Sync web assets into the native project
         run: npx cap sync android
 

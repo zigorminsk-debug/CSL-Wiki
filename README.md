@@ -130,6 +130,22 @@ already rewrites `versionCode` in `android/app/build.gradle` to the run number.
 - **Actions tab → latest run → Artifacts → `csl-wiki-apk`**, or
 - push a tag and grab it from the Release.
 
+### Auto-update from GitHub
+
+The app watches this repo's **Releases** (via the GitHub API, no token needed).
+When a newer version is published it shows an update banner:
+
+- **Installed PWA** → taps *Reload* to pick up the freshly deployed assets.
+- **Bundled APK** → taps *Update* to download the release APK and install over
+  the existing app. Because the signing key never changes, Android installs the
+  update seamlessly (you may need to allow "Install unknown apps" for the
+  browser on first sideload).
+
+To publish an auto-updatable APK, cut a tag `vX.Y.Z` — the workflow builds,
+signs, and creates a Release with the APK; the app detects it automatically.
+The app's own version is baked into the build (`public/version.json` is written
+by the workflow from the run/tag), which is what the comparison uses.
+
 ## License
 
 MIT

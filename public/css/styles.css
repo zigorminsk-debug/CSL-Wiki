@@ -186,3 +186,16 @@ button { font-family: inherit; cursor: pointer; }
 .login-form input:focus { outline: none; border-color: var(--primary); }
 .login-error { color: var(--danger); font-size: 13px; min-height: 16px; }
 .appbar #btn-logout { margin-left: 10px; }
+
+/* Update banner */
+.update-banner {
+  position: fixed; left: 50%; bottom: 70px; transform: translateX(-50%) translateY(20px);
+  display: none; align-items: center; gap: 10px;
+  background: var(--accent); color: #06251c; padding: 10px 12px; border-radius: 12px;
+  font-size: 13px; font-weight: 600; z-index: 60; max-width: 92%; box-shadow: 0 8px 30px rgba(0,0,0,.4);
+}
+.update-banner.show { display: flex; animation: up-pop .25s ease; }
+@keyframes up-pop { from { opacity: 0; transform: translateX(-50%) translateY(30px); } }
+.update-banner #update-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.update-banner .mini-btn { background: #06251c; color: #fff; border-color: #06251c; }
+.update-banner .mini-btn.ghost { background: transparent; color: #06251c; }

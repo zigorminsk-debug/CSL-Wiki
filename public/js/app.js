@@ -16,6 +16,7 @@ import { api, isOnline, isSimulatedOffline, setSimulatedOffline, setRealMode } f
 import { syncNow, wireAutoSync, onSyncStatus, getSyncMeta, isSyncing } from './sync.js';
 import { askAgent } from './agent.js';
 import * as auth from './auth.js';
+import { loadLocalVersion, setUpdateHandler, pollUpdate, applyUpdate } from './update.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
@@ -34,6 +35,7 @@ async function boot() {
   state.bookmarks = new Set(await db.getBookmarks());
   registerSW();
   bindUI();
+  initAutoUpdate();
 
   const mode = auth.getMode();
   const creds = auth.getCredentials();
@@ -47,6 +49,27 @@ async function boot() {
     showStart();
   }
 }
+
+/* ---------------- auto-update from GitHub ---------------- */
+
+function initAutoUpdate() {
+  loadLocalVersion().then(() => pollUpdate());
+  setUpdateHandler(showUpdateBanner);
+  setInterval(pollUpdate, 30 * 60 * 1000);
+  window.addEventListener('online', () => { if (isOnline()) pollUpdate(); });
+}
+
+function showUpdateBanner(remote) {
+  lastRemote = remote;
+  const banner = $('#update-banner');
+  banner.dataset.apk = remote.apkUrl ? '1' : '0';
+  $('#update-text').textContent =
+    `New version ${remote.version} available` + (remote.notes ? ' — ' + remote.notes.split('\n')[0] : '');
+  $('#btn-update').textContent = remote.apkUrl ? 'Update' : 'Reload';
+  banner.classList.add('show');
+}
+let lastRemote = null;
+function hideUpdateBanner() { $('#update-banner').classList.remove('show'); }
 
 async function startApp() {
   $('#start-screen').classList.add('hidden');
@@ -385,6 +408,9 @@ function bindUI() {
   $('#btn-demo').addEventListener('click', handleDemo);
   $('#login-form').addEventListener('submit', handleConnect);
   $('#btn-logout').addEventListener('click', handleLogout);
+
+  $('#btn-update').addEventListener('click', () => { if (lastRemote) applyUpdate(lastRemote); });
+  $('#btn-update-later').addEventListener('click', hideUpdateBanner);
 
   renderBookmarks();
 }
