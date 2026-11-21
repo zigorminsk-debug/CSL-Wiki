@@ -185,6 +185,9 @@ button { font-family: inherit; cursor: pointer; }
 }
 .login-form input:focus { outline: none; border-color: var(--primary); }
 .login-error { color: var(--danger); font-size: 13px; min-height: 16px; }
+.login-form .adv { margin-top: 2px; }
+.login-form .adv summary { cursor: pointer; color: var(--muted); font-size: 12px; padding: 4px 0; }
+.login-form .hint { color: var(--muted); font-size: 11px; font-weight: 400; }
 .appbar #btn-logout { margin-left: 10px; }
 
 /* Update banner */

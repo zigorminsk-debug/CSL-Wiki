@@ -30,13 +30,6 @@ function proxyHeaders() {
   if (c && c.serverUrl) h['X-CSL-Base'] = c.serverUrl.replace(/\/$/, '');
   return h;
 }
-function directHeaders() {
-  const h = { 'Content-Type': 'application/json' };
-  if (CONFIG.CONFLUENCE_API_TOKEN) {
-    h.Authorization = 'Basic ' + btoa(`${CONFIG.CONFLUENCE_EMAIL}:${CONFIG.CONFLUENCE_API_TOKEN}`);
-  }
-  return h;
-}
 function apiPathPrefix() {
   const c = getCredentials();
   return (c && c.apiPath) || CONFIG.DEFAULT_API_PATH;
@@ -44,11 +37,10 @@ function apiPathPrefix() {
 
 function buildUrl(apiPath) {
   if (!realMode) return '/api' + apiPath;            // mock
-  if (CONFIG.USE_PROXY) return CONFIG.PROXY_BASE + apiPath;
-  return CONFIG.CONFLUENCE_BASE_URL.replace(/\/$/, '') + apiPath; // direct
+  return CONFIG.PROXY_BASE + apiPath;               // real: via CORS-safe proxy
 }
 function buildHeaders() {
-  return realMode && CONFIG.USE_PROXY ? proxyHeaders() : (!realMode ? { 'Content-Type': 'application/json' } : directHeaders());
+  return realMode ? proxyHeaders() : { 'Content-Type': 'application/json' };
 }
 
 async function request(method, apiPath, body) {

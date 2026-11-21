@@ -23,12 +23,6 @@ export const CONFIG = {
   DEFAULT_SERVER: 'https://w.csl.by',
   DEFAULT_API_PATH: '/wiki/api/v2', // Confluence v2 REST API path (use /rest/api for older)
 
-  // Direct mode (USE_PROXY=false): browser calls Confluence directly — only
-  // works if the server sends CORS headers. Usually requires a proxy instead.
-  CONFLUENCE_BASE_URL: '',
-  CONFLUENCE_API_TOKEN: '',
-  CONFLUENCE_EMAIL: '',
-
   // Optional AI endpoint for the agent (OpenAI-compatible chat completions).
   AGENT_API_URL: '',
   AGENT_API_KEY: '',
