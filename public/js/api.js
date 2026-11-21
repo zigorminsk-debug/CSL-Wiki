@@ -1,161 +1,135 @@
 /**
  * API client.
  *
- * Talks to either the bundled mock server (USE_MOCK) or a real Confluence Cloud
- * v2 REST API. A "simulate offline" switch (stored in localStorage) lets the UI
- * demonstrate offline behaviour without actually killing the network.
+ * Three modes, selected at runtime:
+ *  - mock : bundled demo server (same origin /api/...)
+ *  - real : the user's own Confluence, reached via the Node proxy at
+ *           PROXY_BASE (same origin), which forwards to the user's server URL
+ *           carrying their Basic auth header. Avoids CORS.
+ *
+ * A "simulate offline" switch (localStorage) lets the UI demonstrate offline
+ * behaviour without killing the network.
  */
 import { CONFIG } from './config.js';
+import { getCredentials } from './auth.js';
 
 const OFFLINE_KEY = 'csl-simulate-offline';
+let realMode = localStorage.getItem('csl-mode') === 'real';
 
-export function isSimulatedOffline() {
-  return localStorage.getItem(OFFLINE_KEY) === '1';
-}
-export function setSimulatedOffline(v) {
-  localStorage.setItem(OFFLINE_KEY, v ? '1' : '0');
-}
-export function isOnline() {
-  return navigator.onLine && !isSimulatedOffline();
-}
+export function setRealMode(v) { realMode = !!v; }
+export function isRealMode() { return realMode; }
 
-function headers() {
+export function isSimulatedOffline() { return localStorage.getItem(OFFLINE_KEY) === '1'; }
+export function setSimulatedOffline(v) { localStorage.setItem(OFFLINE_KEY, v ? '1' : '0'); }
+export function isOnline() { return navigator.onLine && !isSimulatedOffline(); }
+
+function proxyHeaders() {
   const h = { 'Content-Type': 'application/json' };
-  if (!CONFIG.USE_MOCK && CONFIG.CONFLUENCE_API_TOKEN) {
-    // Confluence Cloud uses Basic auth with email:token (base64).
-    const creds = btoa(`${CONFIG.CONFLUENCE_EMAIL}:${CONFIG.CONFLUENCE_API_TOKEN}`);
-    h.Authorization = `Basic ${creds}`;
+  const c = getCredentials();
+  if (c && c.username) h.Authorization = 'Basic ' + btoa(`${c.username}:${c.password}`);
+  if (c && c.serverUrl) h['X-CSL-Base'] = c.serverUrl.replace(/\/$/, '');
+  return h;
+}
+function directHeaders() {
+  const h = { 'Content-Type': 'application/json' };
+  if (CONFIG.CONFLUENCE_API_TOKEN) {
+    h.Authorization = 'Basic ' + btoa(`${CONFIG.CONFLUENCE_EMAIL}:${CONFIG.CONFLUENCE_API_TOKEN}`);
   }
   return h;
 }
+function apiPathPrefix() {
+  const c = getCredentials();
+  return (c && c.apiPath) || CONFIG.DEFAULT_API_PATH;
+}
 
-async function request(method, path, body) {
-  if (!isOnline()) {
-    const err = new Error('offline');
-    err.offline = true;
-    throw err;
-  }
-  let url;
-  if (CONFIG.USE_MOCK) {
-    url = path; // same-origin mock
-  } else {
-    url = CONFIG.CONFLUENCE_BASE_URL.replace(/\/$/, '') + path;
-  }
-  const opts = { method, headers: headers() };
+function buildUrl(apiPath) {
+  if (!realMode) return '/api' + apiPath;            // mock
+  if (CONFIG.USE_PROXY) return CONFIG.PROXY_BASE + apiPath;
+  return CONFIG.CONFLUENCE_BASE_URL.replace(/\/$/, '') + apiPath; // direct
+}
+function buildHeaders() {
+  return realMode && CONFIG.USE_PROXY ? proxyHeaders() : (!realMode ? { 'Content-Type': 'application/json' } : directHeaders());
+}
+
+async function request(method, apiPath, body) {
+  if (!isOnline()) { const e = new Error('offline'); e.offline = true; throw e; }
+  const opts = { method, headers: buildHeaders() };
   if (body) opts.body = JSON.stringify(body);
-
-  // For real Confluence v2 endpoints add body-format.
-  if (!CONFIG.USE_MOCK && method === 'GET' && path.includes('/pages/')) {
-    url += (url.includes('?') ? '&' : '?') + 'body-format=storage';
-  }
-
-  const res = await fetch(url, opts);
-  if (!res.ok) {
-    const err = new Error(`HTTP ${res.status}`);
-    err.status = res.status;
-    throw err;
-  }
+  const res = await fetch(buildUrl(apiPath), opts);
+  if (!res.ok) { const e = new Error(`HTTP ${res.status}`); e.status = res.status; throw e; }
   return res.json();
 }
 
-/* ---- Mock adapter (same shape as real adapter) ---- */
+/* ---- Mock adapter (demo server) ---- */
+const mock = {
+  listSpaces: () => request('GET', '/spaces'),
+  listPages: (id) => request('GET', `/spaces/${id}/pages`).then((d) => d.results),
+  getPage: (id) => request('GET', `/pages/${id}`),
+  updatePage: (id, patch) => request('PUT', `/pages/${id}`, patch),
+  createPage: (p) => request('POST', '/pages', p),
+  deletePage: (id) => request('DELETE', `/pages/${id}`),
+  syncSince: (since) => request('GET', `/sync?since=${encodeURIComponent(since || '')}`).then((d) => d.results),
+  currentUser: () => request('GET', '/spaces')
+};
 
-async function mockListSpaces() {
-  return request('GET', '/api/spaces');
-}
-async function mockListPages(spaceId) {
-  const data = await request('GET', `/api/spaces/${spaceId}/pages`);
-  return data.results;
-}
-async function mockGetPage(id) {
-  return request('GET', `/api/pages/${id}`);
-}
-async function mockUpdatePage(id, patch) {
-  return request('PUT', `/api/pages/${id}`, patch);
-}
-async function mockCreatePage(page) {
-  return request('POST', '/api/pages', page);
-}
-async function mockDeletePage(id) {
-  return request('DELETE', `/api/pages/${id}`);
-}
-async function mockSyncSince(since) {
-  const data = await request('GET', `/api/sync?since=${encodeURIComponent(since || '')}`);
-  return data.results;
-}
-
-/* ---- Real Confluence adapter (v2) ---- */
-
-async function realListSpaces() {
-  const data = await request('GET', '/api/v2/spaces?limit=250');
-  return data.results.map((s) => ({
-    id: s.id, key: s.key, name: s.name,
-    description: s.description?.plain?.value || ''
-  }));
-}
-async function realListPages(spaceId) {
-  const data = await request('GET', `/api/v2/spaces/${spaceId}/pages?limit=250`);
-  return data.results.map((p) => ({ id: p.id, spaceId, title: p.title, version: p.version?.number || 1 }));
-}
-async function realGetPage(id) {
-  const p = await request('GET', `/api/v2/pages/${id}`);
-  return {
+/* ---- Real Confluence v2 adapter (via proxy) ---- */
+const P = () => apiPathPrefix();
+const v2 = {
+  listSpaces: () => request('GET', `${P()}/spaces?limit=250`).then((d) => (d.results || []).map((s) => ({
+    id: s.id, key: s.key, name: s.name, description: s.description?.plain?.value || ''
+  }))),
+  listPages: (id) => request('GET', `${P()}/spaces/${id}/pages?limit=250`).then((d) => (d.results || []).map((p) => ({
+    id: p.id, spaceId: p.spaceId, title: p.title, version: p.version?.number || 1
+  }))),
+  getPage: (id) => request('GET', `${P()}/pages/${id}?body-format=storage`).then((p) => ({
     id: p.id, spaceId: p.spaceId, title: p.title,
     body: p.body?.storage?.value || '', version: p.version?.number || 1,
     labels: (p.labels?.results || []).map((l) => l.name),
     updatedAt: p.version?.createdAt || p.createdAt
-  };
-}
-async function realUpdatePage(id, patch) {
-  // Need current version number to increment.
-  const cur = await request('GET', `/api/v2/pages/${id}`);
-  const ver = cur.version.number + 1;
-  const body = {
-    id, spaceId: cur.spaceId, status: 'current', title: patch.title ?? cur.title,
-    body: { storage: { value: patch.body ?? '', representation: 'storage' } },
-    version: { number: ver, message: 'Edited from CSL-Wiki mobile' }
-  };
-  const p = await request('PUT', `/api/v2/pages/${id}`, body);
-  return { id: p.id, title: p.title, version: p.version.number };
-}
-async function realCreatePage(page) {
-  const body = {
-    spaceId: page.spaceId, status: 'current', title: page.title,
-    body: { storage: { value: page.body || '', representation: 'storage' } }
-  };
-  const p = await request('POST', '/api/v2/pages', body);
-  return { id: p.id, title: p.title, version: p.version.number };
-}
-async function realDeletePage(id) {
-  return request('DELETE', `/api/v2/pages/${id}`);
-}
-async function realSyncSince(since) {
-  // v2 does not have a simple "changed since" endpoint; use CQL search.
-  const cql = since ? `lastmodified >= "${since}"` : '';
-  const url = cql
-    ? `/api/v2/pages?body-format=storage&limit=250&cql=${encodeURIComponent(cql)}`
-    : `/api/v2/pages?body-format=storage&limit=250`;
-  const data = await request('GET', url);
-  return data.results.map((p) => ({
-    id: p.id, spaceId: p.spaceId, title: p.title,
-    body: p.body?.storage?.value || '',
-    version: p.version?.number || 1,
-    updatedAt: p.version?.createdAt || p.createdAt
-  }));
-}
+  })),
+  updatePage: async (id, patch) => {
+    const cur = await request('GET', `${P()}/pages/${id}`);
+    const ver = (cur.version?.number || 1) + 1;
+    const res = await request('PUT', `${P()}/pages/${id}`, {
+      id, spaceId: cur.spaceId, status: 'current',
+      title: patch.title ?? cur.title,
+      body: { storage: { value: patch.body ?? '', representation: 'storage' } },
+      version: { number: ver, message: 'Edited from CSL-Wiki' }
+    });
+    return { id: res.id, title: res.title, version: res.version?.number || ver };
+  },
+  createPage: (p) => request('POST', `${P()}/pages`, {
+    spaceId: p.spaceId, status: 'current', title: p.title,
+    body: { storage: { value: p.body || '', representation: 'storage' } }
+  }).then((res) => ({ id: res.id, title: res.title, version: res.version?.number || 1 })),
+  deletePage: (id) => request('DELETE', `${P()}/pages/${id}`),
+  syncSince: async (since) => {
+    let url = `${P()}/pages?limit=250`;
+    if (since) url += `&cql=${encodeURIComponent(`lastmodified >= "${since}"`)}`;
+    const d = await request('GET', url);
+    return (d.results || []).map((p) => ({
+      id: p.id, spaceId: p.spaceId, title: p.title,
+      body: p.body?.storage?.value || '', version: p.version?.number || 1,
+      updatedAt: p.version?.createdAt || p.createdAt
+    }));
+  },
+  currentUser: () => request('GET', `${P()}/user/current`)
+};
 
-/* ---- Public facade ---- */
-
-const A = CONFIG.USE_MOCK
-  ? { listSpaces: mockListSpaces, listPages: mockListPages, getPage: mockGetPage, updatePage: mockUpdatePage, createPage: mockCreatePage, deletePage: mockDeletePage, syncSince: mockSyncSince }
-  : { listSpaces: realListSpaces, listPages: realListPages, getPage: realGetPage, updatePage: realUpdatePage, createPage: realCreatePage, deletePage: realDeletePage, syncSince: realSyncSince };
+const A = () => (realMode ? v2 : mock);
 
 export const api = {
-  listSpaces: (...a) => A.listSpaces(...a),
-  listPages: (...a) => A.listPages(...a),
-  getPage: (...a) => A.getPage(...a),
-  updatePage: (...a) => A.updatePage(...a),
-  createPage: (...a) => A.createPage(...a),
-  deletePage: (...a) => A.deletePage(...a),
-  syncSince: (...a) => A.syncSince(...a)
+  listSpaces: (...a) => A().listSpaces(...a),
+  listPages: (...a) => A().listPages(...a),
+  getPage: (...a) => A().getPage(...a),
+  updatePage: (...a) => A().updatePage(...a),
+  createPage: (...a) => A().createPage(...a),
+  deletePage: (...a) => A().deletePage(...a),
+  syncSince: (...a) => A().syncSince(...a),
+  currentUser: (...a) => A().currentUser(...a)
 };
+
+/** Validate credentials against the user's server (used by the login screen). */
+export async function testConnection() {
+  return api.currentUser();
+}

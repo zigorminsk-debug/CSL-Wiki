@@ -15,8 +15,34 @@
   <header class="appbar">
     <button id="panel-toggle" class="icon-btn" aria-label="Menu">☰</button>
     <div class="brand">CSL&nbsp;<span>Wiki</span></div>
+    <button id="btn-logout" class="icon-btn" title="Log out / switch server" aria-label="Log out">⏻</button>
     <div id="conn-badge" class="badge">● …</div>
   </header>
+
+  <div id="start-screen" class="start-screen">
+    <div class="start-card">
+      <h1>CSL-Wiki</h1>
+      <p class="sub">Your Confluence wiki — offline-ready on your phone.</p>
+      <button id="btn-demo" class="primary-btn">Try the demo</button>
+      <div class="divider"><span>or connect your server</span></div>
+      <form id="login-form" class="login-form" autocomplete="on">
+        <label>Server URL
+          <input id="login-server" type="url" value="https://w.csl.by" placeholder="https://w.csl.by" />
+        </label>
+        <label>Username
+          <input id="login-user" type="text" autocomplete="username" placeholder="username" />
+        </label>
+        <label>Password
+          <input id="login-pass" type="password" autocomplete="current-password" placeholder="password" />
+        </label>
+        <label>API path
+          <input id="login-apipath" type="text" value="/wiki/api/v2" placeholder="/wiki/api/v2" />
+        </label>
+        <button type="submit" class="primary-btn">Connect</button>
+        <div id="login-error" class="login-error"></div>
+      </form>
+    </div>
+  </div>
 
   <div class="layout">
     <aside id="sidebar" class="sidebar">

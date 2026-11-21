@@ -23,17 +23,22 @@ native Android app, with everything needed to wrap it into a real compiled
   Works fully offline; optionally uses an OpenAI-compatible model if configured.
 - 🔖 **Bookmarks** and **spaces/pages** browsing, with dirty/conflict indicators.
 
-## Quick start (demo)
+## Quick start
 
 ```bash
-npm start          # serves the app + a mock Confluence API on :3000
+npm start          # serves the app + proxy + a mock Confluence API on :3000
 ```
 
-Open <http://localhost:3000>. For the real phone experience, either:
+Open <http://localhost:3000>. On first launch you get a start screen:
 
-- Visit the URL from your Android phone's Chrome and choose
-  **⋮ → Add to Home screen**, or
-- Use Chrome DevTools device toolbar (toggle device mode).
+- **Try the demo** — browse a built-in sample wiki, works fully offline.
+- **Connect your server** — enter your wiki URL (default `https://w.csl.by`),
+  **username** and **password**, and the app connects to your own Confluence
+  through the Node proxy (CORS-safe). The API path defaults to `/wiki/api/v2`
+  (use `/rest/api` for older self-hosted instances).
+
+For the real phone experience, visit the URL from your Android Chrome and choose
+**⋮ → Add to Home screen**, or use Chrome DevTools device mode.
 
 Try the offline flow: open a few pages, tick **Simulate offline** in the Sync
 panel, edit a page (it is queued), then untick it — the queued change syncs

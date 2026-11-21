@@ -68,21 +68,48 @@ open and read cached content (it still syncs when it reaches your Confluence).
 
 ---
 
-## Connecting to a real Confluence Cloud
+## Connecting to a real Confluence (username + password)
 
-Edit `public/js/config.js`:
+You do **not** edit config files to connect — the app has a **login screen**:
+enter your server URL (default `https://w.csl.by`), username and password. The
+app then talks to your server through the bundled Node server acting as a
+**CORS-safe proxy** (`/api/csl/...`), forwarding your Basic-auth credentials to
+your server. This is required because a browser/WebView cannot call
+`w.csl.by` directly (CORS).
+
+How it works:
+
+1. The login form stores `{ serverUrl, username, password, apiPath }` (localStorage).
+2. Every API call goes to `PROXY_BASE + apiPath + endpoint` (same origin).
+3. The Node server (`server/server.js`, `handleProxy`) forwards to
+   `<serverUrl>/<apiPath>/<endpoint>` carrying your `Authorization: Basic …`
+   header and an `X-CSL-Base` header.
+4. The adapter speaks the Confluence **v2 REST API**
+   (`/wiki/api/v2/spaces`, `/wiki/api/v2/pages`, …). For older self-hosted
+   instances that only expose v1, change the **API path** field on the login
+   screen to `/rest/api`.
+
+The API path prefix is configurable per server (login screen → "API path"),
+default `/wiki/api/v2`.
+
+> If your instance uses SSO (Crowd/OIDC) instead of Basic auth, the REST API may
+> reject Basic credentials. In that case point the app at a reverse proxy that
+> injects a session, or use a personal access token where supported.
+
+### For the compiled APK (Capacitor)
+
+A bundled APK loads its assets from `file://`, so a **relative** `PROXY_BASE`
+(`/api/csl`) will not resolve. You must host the Node server somewhere reachable
+and set the absolute URL before building:
 
 ```js
-export const CONFIG = {
-  USE_MOCK: false,
-  CONFLUENCE_BASE_URL: 'https://your-tenant.atlassian.net/wiki',
-  CONFLUENCE_API_TOKEN: 'your-api-token',
-  CONFLUENCE_EMAIL: 'you@example.com'
-};
+// public/js/config.js
+PROXY_BASE: 'https://csl-proxy.example.com/api/csl'
 ```
 
-Generate an API token at
-https://id.atlassian.com/manage-profile/security/api-tokens.
+Then `npx cap sync android && ./gradlew assembleRelease` as described above. The
+APK's WebView will call your hosted proxy, which forwards to `w.csl.by`.
 
-The adapter uses the Confluence **v2 REST API**
-(`/wiki/api/v2/spaces`, `/wiki/api/v2/pages`, …).
+> Security: the password is stored in the device's localStorage and sent only to
+> your own server via the proxy. On a shared device, prefer a short session or a
+> backend that exchanges credentials for a token.

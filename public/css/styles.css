@@ -156,3 +156,33 @@ button { font-family: inherit; cursor: pointer; }
   .sidebar.open { transform: translateX(0); box-shadow: 0 0 40px rgba(0,0,0,.5); }
   .reader-bar h1 { font-size: 19px; }
 }
+
+/* Generic hidden helper */
+.hidden { display: none !important; }
+
+/* Start / login screen */
+.start-screen {
+  position: fixed; inset: 0; z-index: 100;
+  display: flex; align-items: center; justify-content: center;
+  background: radial-gradient(1200px 600px at 50% -10%, #1d4fd0 0%, #0f1115 60%);
+  padding: 20px;
+}
+.start-card {
+  width: 100%; max-width: 380px; background: var(--surface);
+  border: 1px solid var(--border); border-radius: 18px; padding: 26px 22px;
+  box-shadow: 0 20px 60px rgba(0,0,0,.5);
+}
+.start-card h1 { margin: 0 0 4px; font-size: 26px; }
+.start-card .sub { margin: 0 0 18px; color: var(--muted); font-size: 14px; }
+.start-card .primary-btn { width: 100%; margin-bottom: 14px; }
+.divider { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 12px; margin: 6px 0 14px; }
+.divider::before, .divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+.login-form { display: flex; flex-direction: column; gap: 10px; }
+.login-form label { display: flex; flex-direction: column; gap: 5px; font-size: 12px; color: var(--muted); }
+.login-form input {
+  background: var(--surface-2); border: 1px solid var(--border); color: var(--text);
+  border-radius: 10px; padding: 11px 12px; font-size: 14px;
+}
+.login-form input:focus { outline: none; border-color: var(--primary); }
+.login-error { color: var(--danger); font-size: 13px; min-height: 16px; }
+.appbar #btn-logout { margin-left: 10px; }

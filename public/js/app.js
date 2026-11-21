@@ -1,15 +1,21 @@
 /**
  * App controller + UI rendering.
  *
- * Wires up: space/page browsing, offline reading, local editing with an
+ * Boot flow:
+ *  - If a previous mode is stored, start directly (mock demo or real server).
+ *  - Otherwise show the start screen: "Try the demo" or "Connect your server"
+ *    (server URL + username + password). Login is validated against the user's
+ *    Confluence through the Node proxy.
+ *
+ * Then: space/page browsing, offline reading (IndexedDB), local editing with an
  * offline queue, bookmarks, the wiki agent panel, and sync status. The service
  * worker provides offline app-shell loading; this module provides data offline.
  */
 import * as db from './db.js';
-import { api, isOnline, isSimulatedOffline, setSimulatedOffline } from './api.js';
+import { api, isOnline, isSimulatedOffline, setSimulatedOffline, setRealMode } from './api.js';
 import { syncNow, wireAutoSync, onSyncStatus, getSyncMeta, isSyncing } from './sync.js';
 import { askAgent } from './agent.js';
-import { CONFIG } from './config.js';
+import * as auth from './auth.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
@@ -21,30 +27,94 @@ const state = {
   bookmarks: new Set()
 };
 
-/* ---------------- bootstrap ---------------- */
+/* ---------------- boot ---------------- */
 
-async function init() {
+async function boot() {
   await db.openDB();
   state.bookmarks = new Set(await db.getBookmarks());
-  await seedDemo();
-
   registerSW();
-  wireAutoSync();
   bindUI();
 
+  const mode = auth.getMode();
+  const creds = auth.getCredentials();
+  if (mode === 'real' && creds) {
+    setRealMode(true);
+    startApp();
+  } else if (mode === 'mock') {
+    setRealMode(false);
+    startApp();
+  } else {
+    showStart();
+  }
+}
+
+async function startApp() {
+  $('#start-screen').classList.add('hidden');
+  wireAutoSync();
+  bindSpaceButtons(); // safe even if lists empty
   await renderSpaces();
   updateConnectionUI();
   refreshSyncMeta();
-
   onSyncStatus(renderSyncStatus);
   window.addEventListener('online', updateConnectionUI);
   window.addEventListener('offline', updateConnectionUI);
 }
 
-function registerSW() {
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('./sw.js').catch((e) => console.warn('SW register failed', e));
+/* ---------------- start / login ---------------- */
+
+function showStart() {
+  $('#start-screen').classList.remove('hidden');
+}
+function hideStart() {
+  $('#start-screen').classList.add('hidden');
+}
+
+async function handleDemo() {
+  auth.setMode('mock');
+  auth.clearCredentials();
+  setRealMode(false);
+  hideStart();
+  startApp();
+}
+
+async function handleConnect(e) {
+  e.preventDefault();
+  const serverUrl = $('#login-server').value.trim();
+  const username = $('#login-user').value.trim();
+  const password = $('#login-pass').value;
+  const apiPath = $('#login-apipath').value.trim() || '/wiki/api/v2';
+  const errEl = $('#login-error');
+  errEl.textContent = '';
+
+  if (!serverUrl || !username || !password) {
+    errEl.textContent = 'Fill in server URL, username and password.';
+    return;
   }
+
+  auth.setCredentials({ serverUrl, username, password, apiPath });
+  auth.setMode('real');
+  setRealMode(true);
+
+  errEl.textContent = 'Connecting…';
+  try {
+    await api.currentUser();
+    hideStart();
+    startApp();
+  } catch (err) {
+    auth.clearCredentials();
+    auth.clearMode();
+    setRealMode(false);
+    errEl.textContent = 'Could not connect: ' + (err.status ? `HTTP ${err.status}` : err.message) +
+      '. Check the server URL, credentials and API path.';
+  }
+}
+
+function handleLogout() {
+  auth.clearCredentials();
+  auth.clearMode();
+  setRealMode(false);
+  $('#sidebar').classList.remove('open');
+  showStart();
 }
 
 /* ---------------- spaces / pages ---------------- */
@@ -57,7 +127,7 @@ async function renderSpaces() {
   } catch (e) {
     state.spaces = [];
   }
-  // Fall back to spaces discovered only in the local cache (offline / bundled APK).
+  // Fall back to spaces discovered only in the local cache (offline / bundled).
   const cached = await db.getAllPages();
   if (!state.spaces.length) {
     const map = new Map();
@@ -89,35 +159,6 @@ async function renderSpaces() {
   if (state.spaces[0]) selectSpace(state.spaces[0].id);
 }
 
-/* Seed demo content so the app is useful even with no backend (offline APK). */
-const DEMO_PAGES = [
-  { id: 'P-1', spaceId: 'SP-1', title: 'Architecture Overview', labels: ['architecture', 'overview'],
-    body: 'The CSL platform is built from independent services that talk over an internal event bus. The API gateway routes external traffic, the sync service keeps mobile clients consistent, and the search index is rebuilt nightly.' },
-  { id: 'P-2', spaceId: 'SP-1', title: 'Offline Sync Design', labels: ['offline', 'sync', 'design'],
-    body: 'Mobile clients cache pages locally and queue mutations while offline. On reconnect the client pushes its queue and pulls pages changed since the last pull. Conflicts are resolved by comparing server versions; the newer version wins and conflicts are surfaced for review.' },
-  { id: 'P-3', spaceId: 'SP-1', title: 'Release Process', labels: ['release', 'ci', 'process'],
-    body: 'Releases are cut every two weeks. CI builds artifacts, runs integration tests against staging, and promotes behind a feature flag. Rollbacks are one-click and revert the flag plus the last migration.' },
-  { id: 'P-4', spaceId: 'SP-2', title: 'Getting Started', labels: ['onboarding', 'start'],
-    body: 'Welcome to CSL. Create an account, join your team space, and open the mobile app to read pages offline. Use the agent panel to ask questions about any space.' },
-  { id: 'P-5', spaceId: 'SP-2', title: 'Mobile App Guide', labels: ['mobile', 'offline', 'guide'],
-    body: 'Install the app from your home screen on Android. Pages you open are available offline. Edits and bookmarks are queued and synced automatically when back online.' },
-  { id: 'P-6', spaceId: 'SP-3', title: 'Incident Runbook', labels: ['incident', 'runbook', 'ops'],
-    body: 'On an incident: declare it, page on-call, and open a war room. Capture timelines in the incident page and run post-mortems within 5 business days.' }
-];
-
-async function seedDemo() {
-  if (!CONFIG.USE_MOCK) return; // only seed when using the bundled demo backend
-  const existing = await db.getAllPages();
-  if (existing.length) return;
-  const ts = new Date().toISOString();
-  for (const p of DEMO_PAGES) {
-    await db.putPage({
-      ...p, version: 1, updatedAt: ts,
-      localModified: false, dirty: false, conflict: false
-    });
-  }
-}
-
 async function selectSpace(id) {
   state.activeSpace = id;
   $$('.space-btn').forEach((b) => b.classList.toggle('active', b.dataset.id === id));
@@ -130,24 +171,20 @@ async function renderPageList(spaceId) {
   let pages = [];
   try {
     pages = await api.listPages(spaceId);
-  } catch (e) {
-    pages = [];
-  }
-  // Merge cached pages for this space (so offline reads work).
+  } catch (e) { pages = []; }
+
   const cached = (await db.getPagesBySpace(spaceId)).map((p) => ({
     id: p.id, title: p.title, version: p.version, cached: true, dirty: p.dirty
   }));
   const merged = mergeById([...pages, ...cached]);
   state._pageList = merged;
 
-  if (!merged.length) {
-    el.innerHTML = '<li class="muted">No pages.</li>';
-    return;
-  }
+  if (!merged.length) { el.innerHTML = '<li class="muted">No pages.</li>'; return; }
   el.innerHTML = '';
   for (const p of merged) {
     const li = document.createElement('li');
-    const flag = p.dirty ? ' <span class="dot dirty" title="Not yet synced"></span>' : (p.cached && !p._fromServer ? ' <span class="dot cached" title="Cached offline"></span>' : '');
+    const flag = p.dirty ? ' <span class="dot dirty" title="Not yet synced"></span>'
+      : (p.cached && !p._fromServer ? ' <span class="dot cached" title="Cached offline"></span>' : '');
     li.innerHTML = `<button class="page-btn" data-id="${p.id}">${escapeHtml(p.title)}${flag}</button>`;
     el.appendChild(li);
   }
@@ -171,11 +208,7 @@ async function openPage(id) {
   if (!page || !page.body) {
     try {
       const remote = await api.getPage(id);
-      page = {
-        id: remote.id, spaceId: remote.spaceId, title: remote.title, body: remote.body,
-        labels: remote.labels || [], version: remote.version, updatedAt: remote.updatedAt,
-        localModified: false, dirty: false, conflict: false
-      };
+      page = { ...remote, localModified: false, dirty: false, conflict: false };
       await db.putPage(page);
     } catch (e) {
       if (!page) { $('#page-content').innerHTML = '<p class="muted">Offline and not cached.</p>'; return; }
@@ -347,9 +380,12 @@ function bindUI() {
     updateConnectionUI();
     if (!e.target.checked && isOnline()) syncNow();
   });
-  $('#panel-toggle').addEventListener('click', () => {
-    $('#sidebar').classList.toggle('open');
-  });
+  $('#panel-toggle').addEventListener('click', () => $('#sidebar').classList.toggle('open'));
+
+  $('#btn-demo').addEventListener('click', handleDemo);
+  $('#login-form').addEventListener('submit', handleConnect);
+  $('#btn-logout').addEventListener('click', handleLogout);
+
   renderBookmarks();
 }
 
@@ -376,4 +412,10 @@ function escapeHtml(s) {
   return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
-init().catch((e) => console.error(e));
+function registerSW() {
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./sw.js').catch((e) => console.warn('SW register failed', e));
+  }
+}
+
+boot().catch((e) => console.error(e));

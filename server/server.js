@@ -217,6 +217,57 @@ async function handleApi(req, res, url) {
 }
 
 /* ------------------------------------------------------------------ */
+/* Proxy to a real Confluence server (CORS-safe tunnel)               */
+/*                                                                     */
+/* The browser/WebView cannot call w.csl.by directly (CORS), so it     */
+/* calls /api/csl/<path> on THIS server. We forward the request to     */
+/* <X-CSL-Base>/<path> carrying the user's Basic auth header. The      */
+/* proxy is same-origin to the app, so the browser is happy.           */
+/* ------------------------------------------------------------------ */
+
+function readBodyRaw(req) {
+  return new Promise((resolve, reject) => {
+    let data = '';
+    req.on('data', (c) => (data += c));
+    req.on('end', () => resolve(data));
+    req.on('error', reject);
+  });
+}
+
+async function handleProxy(req, res, url) {
+  const base = (req.headers['x-csl-base'] || process.env.CSL_BASE || 'https://w.csl.by').replace(/\/$/, '');
+  const targetPath = url.pathname.replace(/^\/api\/csl/, '') || '/';
+  const target = base + targetPath + (url.search || '');
+
+  const headers = {};
+  const auth = req.headers['authorization'];
+  if (auth) headers['Authorization'] = auth;
+  headers['Content-Type'] = req.headers['content-type'] || 'application/json';
+  headers['Accept'] = 'application/json';
+
+  let body;
+  if (req.method !== 'GET' && req.method !== 'HEAD') body = await readBodyRaw(req);
+
+  const opts = { method: req.method, headers, body, redirect: 'follow' };
+  if (process.env.CSL_INSECURE === '1') {
+    const https = await import('node:https');
+    opts.agent = new https.Agent({ rejectUnauthorized: false });
+  }
+
+  try {
+    const upstream = await fetch(target, opts);
+    const text = await upstream.text();
+    res.writeHead(upstream.status, {
+      'Content-Type': upstream.headers.get('content-type') || 'application/json; charset=utf-8',
+      'Cache-Control': 'no-store'
+    });
+    res.end(text);
+  } catch (e) {
+    sendJson(res, 502, { error: 'proxy_error', message: String(e && e.message || e) });
+  }
+}
+
+/* ------------------------------------------------------------------ */
 /* Static hosting                                                     */
 /* ------------------------------------------------------------------ */
 
@@ -257,6 +308,7 @@ async function serveStatic(req, res, url) {
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://${req.headers.host}`);
+    if (url.pathname.startsWith('/api/csl/')) return await handleProxy(req, res, url);
     if (url.pathname.startsWith('/api/')) return await handleApi(req, res, url);
     return await serveStatic(req, res, url);
   } catch (err) {
