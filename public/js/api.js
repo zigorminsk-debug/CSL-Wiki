@@ -23,11 +23,15 @@ export function isSimulatedOffline() { return localStorage.getItem(OFFLINE_KEY) 
 export function setSimulatedOffline(v) { localStorage.setItem(OFFLINE_KEY, v ? '1' : '0'); }
 export function isOnline() { return navigator.onLine && !isSimulatedOffline(); }
 
-function proxyHeaders() {
+function isDirect() {
+  const c = getCredentials();
+  return !!(c && c.direct);
+}
+function authHeaders() {
   const h = { 'Content-Type': 'application/json' };
   const c = getCredentials();
   if (c && c.username) h.Authorization = 'Basic ' + btoa(`${c.username}:${c.password}`);
-  if (c && c.serverUrl) h['X-CSL-Base'] = c.serverUrl.replace(/\/$/, '');
+  if (!isDirect() && c && c.serverUrl) h['X-CSL-Base'] = c.serverUrl.replace(/\/$/, '');
   return h;
 }
 function apiPathPrefix() {
@@ -36,11 +40,15 @@ function apiPathPrefix() {
 }
 
 function buildUrl(apiPath) {
-  if (!realMode) return '/api' + apiPath;            // mock
-  return CONFIG.PROXY_BASE + apiPath;               // real: via CORS-safe proxy
+  if (!realMode) return '/api' + apiPath;                 // mock
+  if (isDirect()) {                                       // browser talks to the server directly
+    const c = getCredentials();
+    return (c.serverUrl || '').replace(/\/$/, '') + apiPath;
+  }
+  return CONFIG.PROXY_BASE + apiPath;                     // real: via CORS-safe proxy
 }
 function buildHeaders() {
-  return realMode ? proxyHeaders() : { 'Content-Type': 'application/json' };
+  return realMode ? authHeaders() : { 'Content-Type': 'application/json' };
 }
 
 async function request(method, apiPath, body) {

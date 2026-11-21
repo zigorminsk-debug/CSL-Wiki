@@ -18,7 +18,8 @@ export function setCredentials(c) {
     serverUrl: c.serverUrl,
     username: c.username,
     password: c.password,
-    apiPath: c.apiPath || '/wiki/api/v2'
+    apiPath: c.apiPath || '/wiki/api/v2',
+    direct: !!c.direct
   }));
 }
 export function clearCredentials() { localStorage.removeItem(KEY); }

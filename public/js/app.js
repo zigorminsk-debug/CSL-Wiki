@@ -106,6 +106,7 @@ async function handleConnect(e) {
   const username = $('#login-user').value.trim();
   const password = $('#login-pass').value;
   const apiPath = $('#login-apipath').value.trim() || '/wiki/api/v2';
+  const direct = $('#login-direct').checked;
   const errEl = $('#login-error');
   errEl.textContent = '';
 
@@ -114,7 +115,7 @@ async function handleConnect(e) {
     return;
   }
 
-  auth.setCredentials({ serverUrl, username, password, apiPath });
+  auth.setCredentials({ serverUrl, username, password, apiPath, direct });
   auth.setMode('real');
   setRealMode(true);
 
@@ -127,8 +128,19 @@ async function handleConnect(e) {
     auth.clearCredentials();
     auth.clearMode();
     setRealMode(false);
-    errEl.textContent = 'Could not connect: ' + (err.status ? `HTTP ${err.status}` : err.message) +
-      '. Check the server URL, credentials and API path.';
+    let msg = 'Could not connect: ';
+    if (err.status) {
+      msg += `HTTP ${err.status}`;
+      if (err.status === 401 || err.status === 403) msg += ' — wrong username/password, or the server rejects Basic auth (e.g. SSO).';
+    } else if (err.message && /fetch failed|network|Failed to fetch/i.test(err.message)) {
+      msg += 'cannot reach the server. ' +
+        (direct
+          ? 'Direct mode needs the server to allow CORS for this origin.'
+          : 'The app server (proxy) cannot reach ' + serverUrl + '. Deploy the app where it has network access to your server, or enable "Connect directly" if your server allows CORS.');
+    } else {
+      msg += err.message;
+    }
+    errEl.textContent = msg;
   }
 }
 

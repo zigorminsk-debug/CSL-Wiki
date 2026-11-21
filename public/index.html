@@ -40,6 +40,10 @@
           <label>API path <span class="hint">(REST endpoint — not a key)</span>
             <input id="login-apipath" type="text" value="/wiki/api/v2" placeholder="/wiki/api/v2" />
           </label>
+          <label class="check">
+            <input id="login-direct" type="checkbox" />
+            Connect directly (your browser → server; needs CORS on the server)
+          </label>
         </details>
         <button type="submit" class="primary-btn">Connect</button>
         <div id="login-error" class="login-error"></div>
