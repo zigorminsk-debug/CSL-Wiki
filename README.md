@@ -91,6 +91,40 @@ Two supported paths, both documented in **docs/ANDROID_BUILD.md**:
 - **Capacitor** — bundles the PWA into the APK, so the app is fully self-
   contained and offline even before first sync.
 
+## Continuous build with GitHub Actions (signed APK)
+
+The repo includes `.github/workflows/build-android.yml`, which on every push
+(and on `workflow_dispatch`) builds a **signed release APK** and uploads it as a
+workflow artifact. Push a tag `v1.0.0` to also publish a GitHub Release with the
+APK attached.
+
+The signing identity is **permanent** so every build — and therefore every
+update installed over a previous one — uses the same key:
+
+- The keystore `android/app/release-key.p12` is **committed to the repo** (this
+  is what makes updates install over the old app — the signing key never
+  changes).
+- Its password / alias live in `android/gradle.properties`
+  (`RELEASE_STORE_PASSWORD`, `RELEASE_KEY_ALIAS`, `RELEASE_KEY_PASSWORD`).
+- `android/app/build.gradle` reads those props in its `signingConfigs.release`
+  and applies them to the `release` build type.
+
+> ⚠️ **Security note:** because the keystore is committed, anyone with read
+> access to the repo can sign builds with this key. For a public repo, prefer
+> moving the three `RELEASE_*` password/alias values into GitHub Actions
+> **secrets** and keeping only `release-key.p12` committed (the workflow can be
+> switched to read from `${{ secrets.* }}`). For a private repo this is fine.
+> Never lose `release-key.p12` — losing it means you can no longer ship updates
+> that install over existing installs.
+
+To bump `versionCode` per build (required for updates to apply), the workflow
+already rewrites `versionCode` in `android/app/build.gradle` to the run number.
+
+### Get the APK
+
+- **Actions tab → latest run → Artifacts → `csl-wiki-apk`**, or
+- push a tag and grab it from the Release.
+
 ## License
 
 MIT
