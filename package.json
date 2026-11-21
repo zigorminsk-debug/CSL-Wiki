@@ -1,0 +1,30 @@
+{
+  "name": "csl-wiki",
+  "version": "1.0.0",
+  "description": "Confluence Wiki mobile client (PWA) with offline support and automatic sync. Installable on Android, wrapable into a native APK.",
+  "type": "module",
+  "scripts": {
+    "start": "node server/server.js",
+    "dev": "node server/server.js",
+    "serve": "node server/server.js",
+    "test": "node test/sync.test.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "@capacitor/android": "^6.2.3",
+    "@capacitor/cli": "^6.2.3",
+    "@capacitor/core": "^6.2.3",
+    "fake-indexeddb": "^6.0.0"
+  },
+  "keywords": [
+    "confluence",
+    "wiki",
+    "pwa",
+    "offline",
+    "sync",
+    "android"
+  ],
+  "license": "MIT"
+}

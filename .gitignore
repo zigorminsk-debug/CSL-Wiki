@@ -1,0 +1,9 @@
+node_modules/
+*.log
+.DS_Store
+android-keystore.jks
+.env
+# Android: keep the native project + committed signing keystore, ignore build output
+android/**/build/
+android/.gradle/
+android/local.properties
