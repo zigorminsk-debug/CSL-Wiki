@@ -74,7 +74,7 @@ public final class MainActivity extends Activity {
         final long epoch = sessionEpoch;
         api = new ConfluenceApi(base(), new ConfluenceApi.Cookies() {
             public String get(String url) { return epoch == sessionEpoch ? CookieManager.getInstance().getCookie(url) : null; }
-            public void set(String url, String value) { if (epoch == sessionEpoch) CookieManager.getInstance().setCookie(url, value); }
+            public void set(String url, String value) { runOnUiThread(() -> { if (epoch == sessionEpoch && !isDestroyed()) CookieManager.getInstance().setCookie(url, value); }); }
         });
     }
     private String base() { return prefs.getString("base", SitePolicy.DEFAULT_BASE); }
