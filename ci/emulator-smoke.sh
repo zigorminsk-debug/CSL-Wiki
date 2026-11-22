@@ -18,4 +18,6 @@ PYTEST
 fi
 cat ui-test.log
 mkdir -p artifacts
-adb pull /data/local/tmp/csl-welcome.png artifacts/CSL-Wiki-screen.png
+if ! adb pull /data/local/tmp/csl-welcome.png artifacts/CSL-Wiki-screen.png; then
+  echo "::notice::UI tests passed, but the optional screenshot could not be exported."
+fi
