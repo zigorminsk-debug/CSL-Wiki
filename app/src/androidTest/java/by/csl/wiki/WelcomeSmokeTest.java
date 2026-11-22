@@ -32,6 +32,16 @@ public class WelcomeSmokeTest {
                 assertTrue(image.compress(Bitmap.CompressFormat.PNG, 100, out));
             }
             image.recycle();
+            // Gradle may uninstall the tested app after the run, deleting externalFilesDir.
+            // Copy the non-sensitive welcome screenshot to shell-owned temporary storage first.
+            try (android.os.ParcelFileDescriptor descriptor = InstrumentationRegistry.getInstrumentation().getUiAutomation()
+                    .executeShellCommand("cp /sdcard/Android/data/by.csl.wiki/files/welcome.png /data/local/tmp/csl-welcome.png && echo COPIED");
+                 java.io.InputStream result = new android.os.ParcelFileDescriptor.AutoCloseInputStream(descriptor)) {
+                java.io.ByteArrayOutputStream bytes = new java.io.ByteArrayOutputStream();
+                byte[] buffer = new byte[1024]; int count;
+                while ((count = result.read(buffer)) != -1) bytes.write(buffer, 0, count);
+                assertTrue(bytes.toString("UTF-8").contains("COPIED"));
+            }
         }
     }
     private static void assertWelcome(ActivityScenario<MainActivity> scenario) {
