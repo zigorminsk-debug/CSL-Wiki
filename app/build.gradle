@@ -1,0 +1,25 @@
+plugins { id 'com.android.application' }
+
+android {
+    namespace 'by.csl.wiki'
+    compileSdk 35
+    defaultConfig {
+        applicationId 'by.csl.wiki'
+        minSdk 26
+        targetSdk 35
+        versionCode (System.getenv('BUILD_NUMBER') ?: '1').toInteger()
+        versionName '0.1.' + (System.getenv('BUILD_NUMBER') ?: '1')
+        testInstrumentationRunner 'android.test.InstrumentationTestRunner'
+        buildConfigField 'String', 'BUILD_REVISION', '"' + (System.getenv('BUILD_REVISION') ?: 'local') + '"'
+    }
+    buildFeatures { buildConfig true }
+    compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+    buildTypes { release { minifyEnabled false } }
+    testOptions { unitTests.returnDefaultValues = true }
+    lint { abortOnError true; checkReleaseBuilds true }
+}
+
+dependencies {
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.json:json:20240303'
+}

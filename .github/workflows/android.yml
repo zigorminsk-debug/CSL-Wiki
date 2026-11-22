@@ -1,0 +1,44 @@
+name: Android APK
+on:
+  push:
+    branches: ['arena/10685d80-csl-wiki']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install Android SDK platform
+        run: |
+          sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - name: Unit tests, Android lint and APK
+        env:
+          BUILD_NUMBER: ${{ github.run_number }}
+          BUILD_REVISION: ${{ github.sha }}
+        run: |
+          chmod +x gradlew
+          ./gradlew testDebugUnitTest lintDebug assembleDebug --no-daemon
+      - name: Name APK and write checksum
+        run: |
+          mkdir -p artifacts
+          cp app/build/outputs/apk/debug/app-debug.apk artifacts/CSL-Wiki-Android.apk
+          sha256sum artifacts/CSL-Wiki-Android.apk > artifacts/SHA256SUMS.txt
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: CSL-Wiki-Android
+          path: artifacts/
+      - name: Upload test and lint reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Android-check-reports
+          path: |
+            app/build/reports/tests/
+            app/build/reports/lint-results-debug.html
