@@ -49,6 +49,16 @@ public class ConfluenceApiTest {
         try { client.parsePage(new JSONObject("{\"id\":\"123\"}"), true); fail(); }
         catch (ConfluenceApi.Failure error) { assertEquals(422, error.status); }
     }
+    @Test public void rendersConfluenceCodeAndAttachmentImagesSafely() {
+        ConfluenceApi.Page p = new ConfluenceApi.Page(); p.id = "123";
+        p.url = "https://w.csl.by/confluence/pages/viewpage.action?pageId=123";
+        p.body = "<ac:plain-text-body><![CDATA[if (a < b) { alert(1); }]]></ac:plain-text-body>"
+                + "<ac:image><ri:attachment ri:filename=\"vpn diagram.png\" /></ac:image>";
+        String result = ArticleHtml.storage(p);
+        assertTrue(result.contains("<pre><code>if (a &lt; b)"));
+        assertTrue(result.contains("https://w.csl.by/confluence/download/attachments/123/vpn%20diagram.png"));
+        assertFalse(result.contains("<![CDATA["));
+    }
     @Test public void articleEscapesMetadataAndRestrictsActiveContent() {
         ConfluenceApi.Page p = new ConfluenceApi.Page(); p.title = "<script>alert(1)</script>"; p.space = "A&B"; p.body = "<p>Text</p>";
         String rendered = ArticleHtml.render(p);
