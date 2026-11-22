@@ -1,0 +1,6 @@
+<resources>
+    <item name="login_username" type="id" />
+    <item name="login_password" type="id" />
+    <item name="login_submit" type="id" />
+    <item name="login_error" type="id" />
+</resources>

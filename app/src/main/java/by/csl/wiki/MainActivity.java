@@ -1,6 +1,5 @@
 package by.csl.wiki;
 
-import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.ClipData;
@@ -12,7 +11,6 @@ import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
-import android.net.http.SslError;
 import android.os.Bundle;
 import android.text.InputType;
 import android.view.Gravity;
@@ -21,14 +19,6 @@ import android.view.ViewGroup;
 import android.view.WindowInsets;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputMethodManager;
-import android.webkit.CookieManager;
-import android.webkit.SslErrorHandler;
-import android.webkit.WebResourceError;
-import android.webkit.WebResourceRequest;
-import android.webkit.WebResourceResponse;
-import android.webkit.WebSettings;
-import android.webkit.WebView;
-import android.webkit.WebViewClient;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.FrameLayout;
@@ -37,12 +27,11 @@ import android.widget.ProgressBar;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
-import java.io.ByteArrayInputStream;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-/** Native Android UI. WebView is used only for the real site's login and article rendering. */
+/** Native Android screens, native authentication and native article widgets. No embedded browser. */
 public final class MainActivity extends Activity {
     private static final int BG = 0xff0b1220, CARD = 0xff131f31, BORDER = 0xff26374c;
     private static final int TEXT = 0xffeef3fa, MUTED = 0xff94a7bf, ACCENT = 0xff48dcc3, ERROR = 0xffffa5a5;
@@ -56,7 +45,7 @@ public final class MainActivity extends Activity {
     private String screen = "home", lastError = "", searchQuery = "", readerReturnScreen = "home";
     private ConfluenceApi.Space activeSpace;
     private ConfluenceApi.Page activePage;
-    private WebView webView;
+    private SessionCookies sessionCookies;
     private boolean checkingLogin;
     private volatile long sessionEpoch;
 
@@ -66,16 +55,18 @@ public final class MainActivity extends Activity {
         getWindow().setNavigationBarColor(BG);
         prefs = getSharedPreferences("settings", MODE_PRIVATE);
         store = new OfflineStore(this);
-        CookieManager.getInstance().setAcceptCookie(true);
+        sessionCookies = new SessionCookies(this);
         rebuildApi();
-        if (prefs.getString("identity", "").isEmpty()) showWelcome(); else showHome();
+        if (prefs.getString("identity", "").isEmpty()) showWelcome();
+        else if (sessionCookies.get(base() + "/rest/api/user/current") == null || sessionCookies.get(base() + "/rest/api/user/current").isEmpty()) showLogin();
+        else showHome();
     }
     private void rebuildApi() {
         final long epoch = sessionEpoch;
         api = new ConfluenceApi(base(), new ConfluenceApi.Cookies() {
-            public String get(String url) { return epoch == sessionEpoch ? CookieManager.getInstance().getCookie(url) : null; }
-            public void set(String url, String value) { runOnUiThread(() -> { if (epoch == sessionEpoch && !isDestroyed()) CookieManager.getInstance().setCookie(url, value); }); }
-        }, WebSettings.getDefaultUserAgent(this));
+            public String get(String url) { return epoch == sessionEpoch ? sessionCookies.get(url) : null; }
+            public void set(String url, String value) { runOnUiThread(() -> { if (epoch == sessionEpoch && !isDestroyed()) sessionCookies.set(url, value); }); }
+        }, NativeLogin.USER_AGENT);
     }
     private String base() { return prefs.getString("base", SitePolicy.DEFAULT_BASE); }
     private int dp(float value) { return (int) (value * getResources().getDisplayMetrics().density + .5f); }
@@ -103,14 +94,8 @@ public final class MainActivity extends Activity {
         Button b = button(text, false, click); b.setTextSize(22); b.setMinWidth(0); b.setMinimumWidth(0);
         b.setContentDescription(description); return b;
     }
-    private void releaseWebView() {
-        if (webView == null) return;
-        webView.stopLoading();
-        if (webView.getParent() instanceof ViewGroup) ((ViewGroup) webView.getParent()).removeView(webView);
-        webView.destroy(); webView = null;
-    }
     private void shell(String title, String target, boolean showTabs, Runnable back) {
-        screenToken++; checkingLogin = false; screen = target; releaseWebView();
+        screenToken++; checkingLogin = false; screen = target;
         root = column(); root.setBackgroundColor(BG); root.setFitsSystemWindows(true);
         // Android 15 enforces edge-to-edge for target 35: keep controls clear of all system insets.
         if (android.os.Build.VERSION.SDK_INT >= 30) root.setOnApplyWindowInsetsListener((view, insets) -> {
@@ -168,65 +153,77 @@ public final class MainActivity extends Activity {
         block(detail, label("Прямое подключение", 16, TEXT, true), 6);
         block(detail, label("w.csl.by · без стороннего прокси", 13, MUTED, false), 0);
         detail = card(body);
-        block(detail, label("Пароль остаётся на сайте", 16, TEXT, true), 6);
-        block(detail, label("Вход на настоящей странице Confluence. Клиент не хранит ваш пароль.", 13, MUTED, false), 0);
+        block(detail, label("Полностью нативный клиент", 16, TEXT, true), 6);
+        block(detail, label("Собственная форма входа, пространства и статьи. Пароль не сохраняется.", 13, MUTED, false), 0);
         gap(body, 20);
         block(body, button("Войти в Confluence  →", true, this::showLogin), 12);
         block(body, button("Параметры подключения", false, this::connectionSettings), 12);
         block(body, label("Адрес: " + base() + "\nКлиент только для чтения. Вложения и сложные макросы доступны на сайте.", 12, MUTED, false), 0);
     }
-    @SuppressLint("SetJavaScriptEnabled")
     private void showLogin() {
         sessionEpoch++; rebuildApi();
-        shell("Вход в Confluence", "login", false, () -> { if (hasSession()) showHome(); else showWelcome(); });
+        shell("Вход в аккаунт", "login", false, () -> { if (hasSession()) showHome(); else showWelcome(); });
         int token = screenToken;
-        TextView info = label("Войдите на w.csl.by, затем нажмите «Проверить вход». Пароль вводится только на странице сервера.", 13, MUTED, false);
-        info.setPadding(dp(20), dp(14), dp(20), dp(10)); content.addView(info);
-        ProgressBar progress = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
-        progress.setIndeterminate(true); content.addView(progress, new LinearLayout.LayoutParams(-1, dp(3)));
-        webView = new WebView(this); configureWebView(webView, true);
-        webView.setWebViewClient(new WebViewClient() {
-            @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
-                if (SitePolicy.isTrusted(request.getUrl().toString())) return false;
-                toast("Переход на другой сервер заблокирован. Этот клиент поддерживает вход только на w.csl.by."); return true;
-            }
-            @Override public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
-                return SitePolicy.isTrusted(request.getUrl().toString()) ? null : blocked();
-            }
-            @Override public void onPageFinished(WebView view, String url) { if (token == screenToken) { progress.setVisibility(View.GONE); CookieManager.getInstance().flush(); } }
-            @Override public void onReceivedSslError(WebView view, SslErrorHandler handler, SslError error) {
-                handler.cancel(); runOnUiThread(() -> { info.setTextColor(ERROR); info.setText("Сертификат сервера не прошёл проверку. Проверьте дату телефона, VPN и доверенный корпоративный сертификат. Защита TLS не отключается."); });
-            }
-            @Override public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
-                if (request.isForMainFrame()) { info.setTextColor(ERROR); info.setText("Страница не загрузилась: " + error.getDescription() + ". Проверьте сеть/VPN и адрес установки."); progress.setVisibility(View.GONE); }
-            }
+        LinearLayout body = scroll();
+        heading(body, "CSL / CONFLUENCE", "С возвращением", "Войдите в свою рабочую базу знаний.");
+        LinearLayout server = card(body);
+        block(server, label("СЕРВЕР", 10, ACCENT, true), 4);
+        block(server, label(base(), 16, TEXT, true), 0);
+        block(body, label("Логин", 13, MUTED, true), 8);
+        EditText username = loginInput("Имя пользователя", false); username.setId(R.id.login_username); username.setAutofillHints(View.AUTOFILL_HINT_USERNAME); block(body, username, 18);
+        block(body, label("Пароль", 13, MUTED, true), 8);
+        EditText password = loginInput("Введите пароль", true); password.setId(R.id.login_password); password.setAutofillHints(View.AUTOFILL_HINT_PASSWORD); password.setSaveEnabled(false); block(body, password, 8);
+        android.widget.CheckBox show = new android.widget.CheckBox(this); show.setText("Показать пароль"); show.setTextColor(MUTED); show.setTextSize(13);
+        show.setOnCheckedChangeListener((v, checked) -> { password.setTransformationMethod(checked ? null : android.text.method.PasswordTransformationMethod.getInstance()); password.setSelection(password.length()); });
+        block(body, show, 18);
+        TextView error = label("", 14, ERROR, false); error.setId(R.id.login_error); block(body, error, 12);
+        Button login = button("Войти", true, () -> {}); login.setId(R.id.login_submit);
+        login.setOnClickListener(v -> {
+            if (checkingLogin) return;
+            String user = username.getText().toString().trim();
+            String secret = password.getText().toString();
+            if (user.isEmpty() || secret.isEmpty()) { error.setText("Введите логин и пароль."); return; }
+            if (user.length() > 200 || secret.length() > 4096) { error.setText("Проверьте длину логина и пароля."); return; }
+            checkingLogin = true; login.setEnabled(false); login.setText("Входим…"); error.setText("");
+            username.setEnabled(false); password.setText(""); password.setEnabled(false);
+            ((InputMethodManager) getSystemService(INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(password.getWindowToken(), 0);
+            String address = base();
+            worker.execute(() -> {
+                if (token != screenToken) return;
+                try {
+                    NativeLogin.Result result = NativeLogin.login(address, user, secret);
+                    runOnUiThread(() -> {
+                        if (token != screenToken || isFinishing()) return;
+                        try {
+                            sessionCookies.replace(result.cookies);
+                            String previous = prefs.getString("identity", "");
+                            if (!previous.equals(result.user.identity)) { store.clear(); activeSpace = null; activePage = null; }
+                            prefs.edit().putString("identity", result.user.identity).putString("name", result.user.name).apply();
+                            checkingLogin = false; sessionEpoch++; rebuildApi(); showHome();
+                        } catch (Exception e) { checkingLogin = false; login.setEnabled(true); login.setText("Войти"); username.setEnabled(true); password.setEnabled(true); error.setText("Не удалось сохранить защищённую сессию. Повторите вход."); }
+                    });
+                } catch (Exception e) {
+                    runOnUiThread(() -> {
+                        if (token != screenToken || isFinishing()) return;
+                        checkingLogin = false; login.setEnabled(true); login.setText("Войти"); username.setEnabled(true); password.setEnabled(true);
+                        lastError = errorMessage(e); error.setText(lastError);
+                    });
+                }
+            });
         });
-        content.addView(webView, new LinearLayout.LayoutParams(-1, 0, 1));
-        LinearLayout actions = column(); actions.setPadding(dp(16), dp(12), dp(16), dp(16));
-        Button check = button("Проверить вход", true, () -> checkLogin(token)); block(actions, check, 8);
-        block(actions, button("Путь установки / диагностика", false, this::connectionSettings), 0); content.addView(actions);
-        webView.loadUrl(base() + "/login.action");
+        password.setImeOptions(EditorInfo.IME_ACTION_DONE);
+        password.setOnEditorActionListener((v, action, event) -> { if (action == EditorInfo.IME_ACTION_DONE) { login.performClick(); return true; } return false; });
+        block(body, login, 12);
+        block(body, button("Параметры подключения", false, this::connectionSettings), 18);
+        block(body, label("Пароль отправляется только на w.csl.by по HTTPS и не сохраняется. Проверка сессии выполняется автоматически.", 12, MUTED, false), 0);
+    }
+    private EditText loginInput(String hint, boolean password) {
+        EditText input = new EditText(this); input.setTextSize(16); input.setTextColor(TEXT); input.setHintTextColor(MUTED); input.setHint(hint); input.setSingleLine(true);
+        input.setPadding(dp(16), dp(15), dp(16), dp(15)); input.setBackground(shape(CARD, 12));
+        input.setInputType(InputType.TYPE_CLASS_TEXT | (password ? InputType.TYPE_TEXT_VARIATION_PASSWORD : InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD));
+        return input;
     }
     private boolean hasSession() { return !prefs.getString("identity", "").isEmpty(); }
-    private void checkLogin(int token) {
-        if (checkingLogin) return;
-        checkingLogin = true; CookieManager.getInstance().flush(); toast("Проверяем сессию через REST API…");
-        ConfluenceApi client = api;
-        worker.execute(() -> {
-            if (token != screenToken) return;
-            try {
-                ConfluenceApi.User user = client.currentUser();
-                runOnUiThread(() -> {
-                    if (token != screenToken || isFinishing()) return;
-                    checkingLogin = false;
-                    String previous = prefs.getString("identity", "");
-                    if (!previous.equals(user.identity)) { store.clear(); activeSpace = null; activePage = null; }
-                    prefs.edit().putString("identity", user.identity).putString("name", user.name).apply();
-                    showHome();
-                });
-            } catch (Exception e) { runOnUiThread(() -> { if (token == screenToken && !isFinishing()) { checkingLogin = false; showFailureDialog(e); } }); }
-        });
-    }
 
     private void showHome() {
         shell("CSL Wiki", "home", true, null);
@@ -381,40 +378,42 @@ public final class MainActivity extends Activity {
         LinearLayout.LayoutParams iconLp = new LinearLayout.LayoutParams(dp(48), dp(46)); iconLp.leftMargin = dp(8); actions.addView(refresh, iconLp);
         Button site = icon("↗", "Открыть оригинал", () -> openTrustedSite(page.url)); actions.addView(site, new LinearLayout.LayoutParams(dp(48), dp(46)));
         content.addView(actions);
-        webView = new WebView(this); configureWebView(webView, false);
-        webView.setWebViewClient(new WebViewClient() {
-            @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
-                if (!request.hasGesture()) return true;
-                Uri uri = request.getUrl();
-                if (SitePolicy.isTrusted(uri.toString())) {
-                    String id = uri.getQueryParameter("pageId");
-                    if (id != null && id.matches("[0-9]+")) { openPage(id, false); return true; }
-                    openTrustedSite(uri.toString());
-                } else if ("https".equalsIgnoreCase(uri.getScheme()) || "http".equalsIgnoreCase(uri.getScheme())) {
-                    new AlertDialog.Builder(MainActivity.this).setTitle("Внешняя ссылка").setMessage("Открыть в браузере?\n" + uri.getHost())
-                        .setPositiveButton("Открыть", (d, which) -> external(uri.toString())).setNegativeButton("Отмена", null).show();
-                }
-                return true;
+        LinearLayout article = scroll();
+        block(article, label(page.space.toUpperCase(java.util.Locale.ROOT), 11, ACCENT, true), 10);
+        block(article, label(page.title, 29, TEXT, true), 24);
+        final int token = screenToken;
+        ConfluenceApi client = api;
+        article.addView(new NativeArticleView(this, page, new NativeArticleView.Actions() {
+            public void link(String address) { articleLink(address); }
+            public void image(String address, android.widget.ImageView image, Button state) {
+                worker.execute(() -> {
+                    if (token != screenToken) return;
+                    try {
+                        byte[] bytes = client.image(address);
+                        android.graphics.BitmapFactory.Options options = new android.graphics.BitmapFactory.Options(); options.inJustDecodeBounds = true;
+                        android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.length, options);
+                        if (options.outWidth <= 0 || options.outHeight <= 0) throw new java.io.IOException("Формат изображения не поддерживается.");
+                        int sample = 1; while (Math.max(options.outWidth, options.outHeight) / sample > 1024) sample *= 2;
+                        options.inJustDecodeBounds = false; options.inSampleSize = sample;
+                        android.graphics.Bitmap bitmap = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.length, options);
+                        if (bitmap == null) throw new java.io.IOException("Не удалось прочитать изображение.");
+                        runOnUiThread(() -> { if (token == screenToken && !isFinishing()) { image.setImageBitmap(bitmap); image.setVisibility(View.VISIBLE); state.setVisibility(View.GONE); } else bitmap.recycle(); });
+                    } catch (Exception e) { runOnUiThread(() -> { if (token == screenToken && !isFinishing()) { state.setEnabled(true); state.setText("Изображение недоступно · повторить"); } }); }
+                });
             }
-            @Override public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
-                return SitePolicy.isTrusted(request.getUrl().toString()) ? null : blocked();
-            }
-        });
-        content.addView(webView, new LinearLayout.LayoutParams(-1, 0, 1));
-        webView.loadDataWithBaseURL(base() + "/", ArticleHtml.render(page), "text/html", "UTF-8", null);
+        }));
+        gap(article, 16);
+        block(article, label("Текст доступен в приложении. Сложные макросы и вложения можно открыть по кнопке ↗ по вашему желанию.", 12, MUTED, false), 0);
     }
-    @SuppressLint("SetJavaScriptEnabled")
-    private void configureWebView(WebView view, boolean login) {
-        view.setBackgroundColor(BG);
-        WebSettings s = view.getSettings(); s.setJavaScriptEnabled(login); s.setDomStorageEnabled(login);
-        s.setCacheMode(WebSettings.LOAD_NO_CACHE);
-        s.setAllowFileAccess(false); s.setAllowContentAccess(false); s.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
-        s.setSupportMultipleWindows(false); s.setJavaScriptCanOpenWindowsAutomatically(false); s.setSaveFormData(false);
-        s.setBuiltInZoomControls(!login); s.setDisplayZoomControls(false);
-        CookieManager.getInstance().setAcceptThirdPartyCookies(view, false);
-        view.setDownloadListener((url, userAgent, disposition, mimeType, length) -> { if (SitePolicy.isTrusted(url)) openTrustedSite(url); });
+    private void articleLink(String address) {
+        Uri uri = Uri.parse(address);
+        if (SitePolicy.isTrusted(address)) {
+            String id = uri.getQueryParameter("pageId");
+            if (id != null && id.matches("[0-9]+")) { openPage(id, false); return; }
+        }
+        new AlertDialog.Builder(this).setTitle("Открыть ссылку вне приложения?").setMessage(uri.getHost())
+            .setPositiveButton("Открыть", (d, w) -> external(address)).setNegativeButton("Отмена", null).show();
     }
-    private static WebResourceResponse blocked() { return new WebResourceResponse("text/plain", "UTF-8", new ByteArrayInputStream(new byte[0])); }
     private void openTrustedSite(String url) { if (SitePolicy.isTrusted(url)) external(url); else toast("Недоверенный адрес заблокирован"); }
     private void external(String url) {
         try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url))); }
@@ -441,11 +440,6 @@ public final class MainActivity extends Activity {
         LinearLayout c = card(parent); block(c, label("Не удалось загрузить", 17, ERROR, true), 8); block(c, label(lastError, 14, MUTED, false), 12);
         if (e instanceof ConfluenceApi.Failure && ((ConfluenceApi.Failure) e).authentication()) block(c, button("Открыть вход", true, this::showLogin), 8);
         block(c, button("Повторить", false, () -> { parent.removeView(c); retry.run(); }), 0);
-    }
-    private void showFailureDialog(Exception e) {
-        lastError = errorMessage(e);
-        new AlertDialog.Builder(this).setTitle("Вход пока не подтверждён").setMessage(lastError + "\n\nЗапрос: " + base() + "/rest/api/user/current")
-            .setPositiveButton("Понятно", null).setNeutralButton("Настройки", (d, w) -> connectionSettings()).show();
     }
     private void showSettings() {
         String[] options = hasSession() ? new String[]{"Параметры подключения", "Открыть Confluence в браузере", "Скопировать диагностику", "Очистить локальные статьи", "Выйти из аккаунта", "Повторно открыть вход"}
@@ -484,23 +478,14 @@ public final class MainActivity extends Activity {
             .setPositiveButton("Выйти", (d, w) -> clearSession(base())).setNegativeButton("Отмена", null).show();
     }
     private void clearSession(String newBase) {
-        screenToken++; sessionEpoch++;
-        WebView cacheView = webView == null ? new WebView(this) : webView;
-        cacheView.clearCache(true);
-        if (webView == null) cacheView.destroy();
-        releaseWebView(); store.clear();
+        screenToken++; sessionEpoch++; sessionCookies.clear(); store.clear();
         prefs.edit().clear().putString("base", newBase).apply(); activePage = null; activeSpace = null; searchQuery = "";
-        android.webkit.WebStorage.getInstance().deleteAllData();
-        shell("Выход", "clearing", false, null);
-        content.addView(label("Удаляем сессию с устройства…", 16, MUTED, false));
-        CookieManager.getInstance().removeAllCookies(done -> { if (!isFinishing() && !isDestroyed()) { CookieManager.getInstance().flush(); rebuildApi(); showWelcome(); } });
+        rebuildApi(); showWelcome();
     }
     @Override public void onBackPressed() {
-        if (screen.equals("login") && webView != null && webView.canGoBack()) { webView.goBack(); return; }
         if (screen.equals("reader")) { returnTo(readerReturnScreen); }
         else if (screen.equals("home") || screen.equals("welcome")) super.onBackPressed();
         else if (hasSession()) showHome(); else showWelcome();
     }
-    @Override protected void onPause() { CookieManager.getInstance().flush(); super.onPause(); }
-    @Override protected void onDestroy() { screenToken++; releaseWebView(); worker.shutdownNow(); store.close(); super.onDestroy(); }
+    @Override protected void onDestroy() { screenToken++; worker.shutdownNow(); store.close(); super.onDestroy(); }
 }

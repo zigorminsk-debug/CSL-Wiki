@@ -18,6 +18,11 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+      - name: Keep the test signing identity across native builds
+        uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: csl-wiki-native-debug-signing-v1
       - name: Install Android SDK platform
         run: |
           export ANDROID_HOME="$HOME/csl-android-sdk"
@@ -46,7 +51,7 @@ jobs:
           RESULT=${PIPESTATUS[0]}
           set -e
           if [ "$RESULT" -ne 0 ]; then
-            python3 -c 's=open("build.log").read()[-16000:]; print("::error title=Android build diagnostics::"+s.replace("%","%25").replace("\r","%0D").replace("\n","%0A"))'
+            python3 -c 's=open("build.log").read()[-3500:]; print("::error title=Android build diagnostics::"+s.replace("%","%25").replace("\r","%0D").replace("\n","%0A"))'
             exit "$RESULT"
           fi
       - name: Enable emulator acceleration

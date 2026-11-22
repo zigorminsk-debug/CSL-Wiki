@@ -55,7 +55,7 @@ public final class ConfluenceApi {
     static String authenticatedUser(JSONObject user) throws Failure {
         if ("anonymous".equalsIgnoreCase(user.optString("type")) ||
                 (user.optString("username").isEmpty() && user.optString("userKey").isEmpty() && user.optString("accountId").isEmpty())) {
-            throw new Failure("Сервер не подтвердил вход. Войдите на странице Confluence и нажмите «Проверить вход».", 401);
+            throw new Failure("Сервер не подтвердил вход. Введите логин и пароль в приложении.", 401);
         }
         String name = user.optString("displayName", user.optString("username", "Пользователь"));
         return name.isEmpty() ? "Пользователь" : name;
@@ -131,7 +131,7 @@ public final class ConfluenceApi {
                     for (String value : header.getValue()) cookies.set(address, value);
                 }
             }
-            if (status == 401) throw new Failure("Сессия закончилась или вход ещё не выполнен. Откройте страницу входа.", status);
+            if (status == 401) throw new Failure("Сессия закончилась или вход ещё не выполнен. Войдите в аккаунт заново.", status);
             if (status == 403) throw new Failure("Confluence запретил запрос (HTTP 403). Возможны недостаточные права, CAPTCHA или блокировка сессии.", status);
             if (status >= 300 && status < 400) throw new Failure("Сервер перенаправляет API-запрос. Проверьте вход и путь установки Confluence.", 401);
             if (status == 404) throw new Failure("REST API не найден (HTTP 404). Если Confluence установлен в /confluence или /wiki, укажите этот путь в настройках.", status);
@@ -140,6 +140,28 @@ public final class ConfluenceApi {
             try (InputStream stream = connection.getInputStream()) { text = readLimited(stream); }
             return parseJsonResponse(text, connection.getContentType());
         } finally { connection.disconnect(); }
+    }
+    public byte[] image(String address) throws Exception {
+        if (!SitePolicy.isTrusted(address) || !URIPath.isImagePath(address)) throw new Failure("Недоверенный источник изображения.", 400);
+        HttpURLConnection c = (HttpURLConnection) new URL(address).openConnection();
+        c.setInstanceFollowRedirects(false); c.setConnectTimeout(15000); c.setReadTimeout(25000);
+        c.setRequestProperty("User-Agent", userAgent); c.setRequestProperty("Accept", "image/*");
+        String cookie = cookies.get(address); if (cookie != null && !cookie.isEmpty()) c.setRequestProperty("Cookie", cookie);
+        try {
+            int status = c.getResponseCode();
+            if (status != 200 || c.getContentType() == null || !c.getContentType().toLowerCase(java.util.Locale.ROOT).startsWith("image/")) throw new Failure("Изображение недоступно.", status);
+            try (InputStream in = c.getInputStream(); ByteArrayOutputStream bytes = new ByteArrayOutputStream()) {
+                byte[] buffer = new byte[8192]; int n;
+                while ((n = in.read(buffer)) != -1) { if (bytes.size() + n > 6 * 1024 * 1024) throw new Failure("Изображение больше 6 МБ.", 413); bytes.write(buffer, 0, n); }
+                return bytes.toByteArray();
+            }
+        } finally { c.disconnect(); }
+    }
+    private static final class URIPath {
+        static boolean isImagePath(String url) {
+            String path = java.net.URI.create(url).getPath();
+            return path.contains("/download/attachments/") || path.contains("/download/thumbnails/") || path.contains("/images/") || path.contains("/download/resources/");
+        }
     }
     static JSONObject parseJsonResponse(String text, String contentType) throws Failure {
         String trimmed = text.trim();

@@ -21,3 +21,8 @@ mkdir -p artifacts
 if ! adb pull /data/local/tmp/csl-welcome.png artifacts/CSL-Wiki-screen.png; then
   echo "::notice::UI tests passed, but the optional screenshot could not be exported."
 fi
+for SCREEN in native-login native-article; do
+  if ! adb pull "/data/local/tmp/csl-$SCREEN.png" "artifacts/CSL-Wiki-$SCREEN.png"; then
+    echo "::notice::Optional native screenshot unavailable: $SCREEN"
+  fi
+done

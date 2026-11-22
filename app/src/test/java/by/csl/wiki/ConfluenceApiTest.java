@@ -59,11 +59,9 @@ public class ConfluenceApiTest {
         assertTrue(result.contains("https://w.csl.by/confluence/download/attachments/123/vpn%20diagram.png"));
         assertFalse(result.contains("<![CDATA["));
     }
-    @Test public void articleEscapesMetadataAndRestrictsActiveContent() {
-        ConfluenceApi.Page p = new ConfluenceApi.Page(); p.title = "<script>alert(1)</script>"; p.space = "A&B"; p.body = "<p>Text</p>";
-        String rendered = ArticleHtml.render(p);
-        assertTrue(rendered.contains("&lt;script&gt;")); assertTrue(rendered.contains("A&amp;B"));
-        assertTrue(rendered.contains("default-src 'none'")); assertTrue(rendered.contains("form-action 'none'"));
-        assertTrue(rendered.contains("<p>Text</p>"));
+    @Test public void nativeDocumentRemovesScriptsAndKeepsParagraphs() {
+        ConfluenceApi.Page p = new ConfluenceApi.Page(); p.body = "<script>alert(1)</script><p>Text</p>";
+        java.util.List<ArticleDocument.Block> blocks = ArticleDocument.parse(p);
+        assertEquals(1, blocks.size()); assertEquals("Text", blocks.get(0).html);
     }
 }
