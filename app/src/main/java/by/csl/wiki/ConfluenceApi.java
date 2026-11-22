@@ -43,7 +43,9 @@ public final class ConfluenceApi {
     public User currentUser() throws Exception {
         JSONObject user = request("/user/current");
         String name = authenticatedUser(user);
-        String identity = user.optString("accountId", user.optString("userKey", user.optString("username")));
+        String identity = user.optString("accountId");
+        if (identity.isEmpty()) identity = user.optString("userKey");
+        if (identity.isEmpty()) identity = user.optString("username");
         return new User(name, identity);
     }
     static String authenticatedUser(JSONObject user) throws Failure {

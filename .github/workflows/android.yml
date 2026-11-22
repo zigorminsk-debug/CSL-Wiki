@@ -8,6 +8,9 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      BUILD_NUMBER: ${{ github.run_number }}
+      BUILD_REVISION: ${{ github.sha }}
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-java@v5
@@ -45,6 +48,26 @@ jobs:
             python3 -c 's=open("build.log").read()[-16000:]; print("::error title=Android build diagnostics::"+s.replace("%","%25").replace("\r","%0D").replace("\n","%0A"))'
             exit "$RESULT"
           fi
+      - name: Enable emulator acceleration
+        run: |
+          if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm; fi
+      - name: Native Activity smoke test on Android emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 29
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: |
+            if ! ./gradlew connectedDebugAndroidTest --no-daemon > ui-test.log 2>&1; then
+              cat ui-test.log
+              python3 -c 's=open("ui-test.log").read()[-16000:]; print("::error title=Native UI test diagnostics::"+s.replace("%","%25").replace("\r","%0D").replace("\n","%0A"))'
+              exit 1
+            fi
+            cat ui-test.log
+            mkdir -p artifacts
+            adb pull /sdcard/Android/data/by.csl.wiki/files/welcome.png artifacts/CSL-Wiki-screen.png
       - name: Name APK and write checksum
         run: |
           mkdir -p artifacts
@@ -62,4 +85,5 @@ jobs:
           name: Android-check-reports
           path: |
             app/build/reports/tests/
+            app/build/reports/androidTests/
             app/build/reports/lint-results-debug.html

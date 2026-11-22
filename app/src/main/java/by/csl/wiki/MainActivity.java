@@ -177,6 +177,7 @@ public final class MainActivity extends Activity {
     }
     @SuppressLint("SetJavaScriptEnabled")
     private void showLogin() {
+        sessionEpoch++; rebuildApi();
         shell("Вход в Confluence", "login", false, () -> { if (hasSession()) showHome(); else showWelcome(); });
         int token = screenToken;
         TextView info = label("Войдите на w.csl.by, затем нажмите «Проверить вход». Пароль вводится только на странице сервера.", 13, MUTED, false);
@@ -219,7 +220,7 @@ public final class MainActivity extends Activity {
                     if (token != screenToken || isFinishing()) return;
                     checkingLogin = false;
                     String previous = prefs.getString("identity", "");
-                    if (!previous.equals(user.identity)) store.clear();
+                    if (!previous.equals(user.identity)) { store.clear(); activeSpace = null; activePage = null; }
                     prefs.edit().putString("identity", user.identity).putString("name", user.name).apply();
                     showHome();
                 });

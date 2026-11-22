@@ -24,6 +24,7 @@ public final class OfflineStore extends SQLiteOpenHelper {
         values.put("version", p.version); values.put("saved", existing != null && existing.saved ? 1 : 0);
         values.put("opened", System.currentTimeMillis());
         getWritableDatabase().insertWithOnConflict("pages", null, values, SQLiteDatabase.CONFLICT_REPLACE);
+        getWritableDatabase().execSQL("DELETE FROM pages WHERE saved=0 AND id NOT IN (SELECT id FROM pages WHERE saved=0 ORDER BY opened DESC LIMIT 100)");
     }
     public synchronized ConfluenceApi.Page get(String id) {
         try (Cursor c = getReadableDatabase().query("pages", null, "id=?", new String[]{id}, null, null, null)) {
@@ -41,7 +42,7 @@ public final class OfflineStore extends SQLiteOpenHelper {
             while (c.moveToNext()) {
                 ConfluenceApi.Page p = from(c);
                 if (needle.isEmpty() || p.title.toLowerCase(Locale.ROOT).contains(needle) || p.body.toLowerCase(Locale.ROOT).contains(needle)) pages.add(p);
-                if (pages.size() >= 100) break;
+                if (!savedOnly && pages.size() >= 100) break;
             }
         }
         return pages;

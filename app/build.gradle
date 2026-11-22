@@ -9,7 +9,7 @@ android {
         targetSdk 35
         versionCode = Integer.parseInt(System.getenv('BUILD_NUMBER') ?: '1')
         versionName = '0.1.' + (System.getenv('BUILD_NUMBER') ?: '1')
-        testInstrumentationRunner 'android.test.InstrumentationTestRunner'
+        testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
         buildConfigField 'String', 'BUILD_REVISION', '"' + (System.getenv('BUILD_REVISION') ?: 'local') + '"'
     }
     buildFeatures { buildConfig true }
@@ -20,6 +20,9 @@ android {
 }
 
 dependencies {
+    androidTestImplementation 'androidx.test:core:1.6.1'
+    androidTestImplementation 'androidx.test:runner:1.6.2'
+    androidTestImplementation 'androidx.test.ext:junit:1.2.1'
     testImplementation 'junit:junit:4.13.2'
     testImplementation 'org.json:json:20240303'
 }
