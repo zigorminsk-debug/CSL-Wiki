@@ -35,12 +35,13 @@ public class WelcomeSmokeTest {
             // Gradle may uninstall the tested app after the run, deleting externalFilesDir.
             // Copy the non-sensitive welcome screenshot to shell-owned temporary storage first.
             try (android.os.ParcelFileDescriptor descriptor = InstrumentationRegistry.getInstrumentation().getUiAutomation()
-                    .executeShellCommand("cp /sdcard/Android/data/by.csl.wiki/files/welcome.png /data/local/tmp/csl-welcome.png && echo COPIED");
+                    .executeShellCommand("cp /sdcard/Android/data/by.csl.wiki/files/welcome.png /data/local/tmp/csl-welcome.png");
                  java.io.InputStream result = new android.os.ParcelFileDescriptor.AutoCloseInputStream(descriptor)) {
                 java.io.ByteArrayOutputStream bytes = new java.io.ByteArrayOutputStream();
                 byte[] buffer = new byte[1024]; int count;
                 while ((count = result.read(buffer)) != -1) bytes.write(buffer, 0, count);
-                assertTrue(bytes.toString("UTF-8").contains("COPIED"));
+                // UiAutomation executes argv directly, not through a shell.
+                // Draining stdout waits for cp to finish; adb pull verifies the output.
             }
         }
     }
