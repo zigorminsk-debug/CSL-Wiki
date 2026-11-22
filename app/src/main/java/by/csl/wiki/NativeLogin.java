@@ -29,6 +29,9 @@ public final class NativeLogin {
         Result(ConfluenceApi.User user, List<HttpCookie> cookies) { this.user = user; this.cookies = cookies; }
     }
     public static Result login(String baseUrl, String username, String password) throws Exception {
+        return login(baseUrl, username, password, address -> (HttpURLConnection) URI.create(address).toURL().openConnection());
+    }
+    static Result login(String baseUrl, String username, String password, ConfluenceApi.ConnectionFactory connections) throws Exception {
         String base = SitePolicy.normalizeBase(baseUrl);
         CookieManager jar = new CookieManager(null, CookiePolicy.ACCEPT_ORIGINAL_SERVER);
         ConfluenceApi.Cookies cookies = new ConfluenceApi.Cookies() {
@@ -41,16 +44,16 @@ public final class NativeLogin {
                 catch (Exception ignored) { /* no secrets in logs */ }
             }
         };
-        Reply page = exchange(base + "/login.action", null, cookies);
+        Reply page = exchange(base + "/login.action", null, cookies, connections);
         for (int redirects = 0; page.status >= 300 && page.status < 400; redirects++) {
             if (redirects >= 4) throw new ConfluenceApi.Failure("Слишком много перенаправлений при входе. Проверьте путь установки.", 422);
             String next = trustedRedirect(page.url, page.location);
-            page = exchange(next, null, cookies);
+            page = exchange(next, null, cookies, connections);
         }
         if (page.status != 200) throw new ConfluenceApi.Failure("Страница авторизации недоступна (HTTP " + page.status + ").", page.status);
         Form form = parseForm(base, page.url, page.body);
         Map<String, String> fields = credentials(form, username, password);
-        Reply response = exchange(form.action, encode(fields), cookies);
+        Reply response = exchange(form.action, encode(fields), cookies, connections);
         if (response.reason.toUpperCase(Locale.ROOT).contains("AUTHENTICATION_DENIED") || hasCaptcha(Jsoup.parse(response.body))) {
             throw new ConfluenceApi.Failure("Сервер требует CAPTCHA или разблокировку входа. Завершите проверку на w.csl.by во внешнем браузере либо обратитесь к администратору, затем повторите вход. Приложение не обходит CAPTCHA.", 428);
         }
@@ -58,7 +61,7 @@ public final class NativeLogin {
         else if (response.status >= 400) throw new ConfluenceApi.Failure("Сервер отклонил вход (HTTP " + response.status + "). Проверьте учётную запись и политику входа.", response.status);
         // A redirect or HTTP 200 by itself is NOT proof of authentication.
         try {
-            ConfluenceApi.User user = new ConfluenceApi(base, cookies, USER_AGENT).currentUser();
+            ConfluenceApi.User user = new ConfluenceApi(base, cookies, USER_AGENT, connections).currentUser();
             return new Result(user, jar.getCookieStore().getCookies());
         } catch (ConfluenceApi.Failure error) {
             if (error.authentication()) throw new ConfluenceApi.Failure("Вход не подтверждён. Проверьте логин и пароль; возможна блокировка учётной записи. Автоматических повторных попыток не будет.", 401);
@@ -113,9 +116,9 @@ public final class NativeLogin {
     private static final class Reply {
         String url, location, reason, body; int status;
     }
-    private static Reply exchange(String address, String body, ConfluenceApi.Cookies cookies) throws Exception {
+    private static Reply exchange(String address, String body, ConfluenceApi.Cookies cookies, ConfluenceApi.ConnectionFactory connections) throws Exception {
         if (!SitePolicy.isTrusted(address)) throw new IllegalArgumentException("Недоверенный адрес.");
-        HttpURLConnection c = (HttpURLConnection) URI.create(address).toURL().openConnection();
+        HttpURLConnection c = connections.open(address);
         c.setInstanceFollowRedirects(false); c.setConnectTimeout(15000); c.setReadTimeout(25000); c.setUseCaches(false);
         c.setRequestProperty("User-Agent", USER_AGENT); c.setRequestProperty("Accept", "text/html,application/xhtml+xml");
         String cookie = cookies.get(address); if (cookie != null && !cookie.isEmpty()) c.setRequestProperty("Cookie", cookie);

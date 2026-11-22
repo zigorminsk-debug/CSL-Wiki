@@ -165,26 +165,24 @@ public final class MainActivity extends Activity {
         shell("Вход в аккаунт", "login", false, () -> { if (hasSession()) showHome(); else showWelcome(); });
         int token = screenToken;
         LinearLayout body = scroll();
-        heading(body, "CSL / CONFLUENCE", "С возвращением", "Войдите в свою рабочую базу знаний.");
-        LinearLayout server = card(body);
-        block(server, label("СЕРВЕР", 10, ACCENT, true), 4);
-        block(server, label(base(), 16, TEXT, true), 0);
+        heading(body, "CSL / CONFLUENCE", "С возвращением", "");
+        block(body, label(base(), 13, ACCENT, true), 18);
         block(body, label("Логин", 13, MUTED, true), 8);
         EditText username = loginInput("Имя пользователя", false); username.setId(R.id.login_username); username.setAutofillHints(View.AUTOFILL_HINT_USERNAME); block(body, username, 18);
         block(body, label("Пароль", 13, MUTED, true), 8);
         EditText password = loginInput("Введите пароль", true); password.setId(R.id.login_password); password.setAutofillHints(View.AUTOFILL_HINT_PASSWORD); password.setSaveEnabled(false); block(body, password, 8);
-        android.widget.CheckBox show = new android.widget.CheckBox(this); show.setText("Показать пароль"); show.setTextColor(MUTED); show.setTextSize(13);
+        android.widget.CheckBox show = new android.widget.CheckBox(this); show.setText("Показать пароль"); show.setTextColor(MUTED); show.setTextSize(13); show.setMinHeight(0); show.setMinimumHeight(0); show.setPadding(0, 0, 0, 0);
         show.setOnCheckedChangeListener((v, checked) -> { password.setTransformationMethod(checked ? null : android.text.method.PasswordTransformationMethod.getInstance()); password.setSelection(password.length()); });
         block(body, show, 18);
-        TextView error = label("", 14, ERROR, false); error.setId(R.id.login_error); block(body, error, 12);
+        TextView error = label("", 14, ERROR, false); error.setId(R.id.login_error); error.setVisibility(View.GONE); block(body, error, 12);
         Button login = button("Войти", true, () -> {}); login.setId(R.id.login_submit);
         login.setOnClickListener(v -> {
             if (checkingLogin) return;
             String user = username.getText().toString().trim();
             String secret = password.getText().toString();
-            if (user.isEmpty() || secret.isEmpty()) { error.setText("Введите логин и пароль."); return; }
-            if (user.length() > 200 || secret.length() > 4096) { error.setText("Проверьте длину логина и пароля."); return; }
-            checkingLogin = true; login.setEnabled(false); login.setText("Входим…"); error.setText("");
+            if (user.isEmpty() || secret.isEmpty()) { error.setVisibility(View.VISIBLE); error.setText("Введите логин и пароль."); return; }
+            if (user.length() > 200 || secret.length() > 4096) { error.setVisibility(View.VISIBLE); error.setText("Проверьте длину логина и пароля."); return; }
+            checkingLogin = true; login.setEnabled(false); login.setText("Входим…"); error.setText(""); error.setVisibility(View.GONE);
             username.setEnabled(false); password.setText(""); password.setEnabled(false);
             ((InputMethodManager) getSystemService(INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(password.getWindowToken(), 0);
             String address = base();
@@ -200,13 +198,13 @@ public final class MainActivity extends Activity {
                             if (!previous.equals(result.user.identity)) { store.clear(); activeSpace = null; activePage = null; }
                             prefs.edit().putString("identity", result.user.identity).putString("name", result.user.name).apply();
                             checkingLogin = false; sessionEpoch++; rebuildApi(); showHome();
-                        } catch (Exception e) { checkingLogin = false; login.setEnabled(true); login.setText("Войти"); username.setEnabled(true); password.setEnabled(true); error.setText("Не удалось сохранить защищённую сессию. Повторите вход."); }
+                        } catch (Exception e) { checkingLogin = false; login.setEnabled(true); login.setText("Войти"); username.setEnabled(true); password.setEnabled(true); error.setVisibility(View.VISIBLE); error.setText("Не удалось сохранить защищённую сессию. Повторите вход."); }
                     });
                 } catch (Exception e) {
                     runOnUiThread(() -> {
                         if (token != screenToken || isFinishing()) return;
                         checkingLogin = false; login.setEnabled(true); login.setText("Войти"); username.setEnabled(true); password.setEnabled(true);
-                        lastError = errorMessage(e); error.setText(lastError);
+                        lastError = errorMessage(e); error.setVisibility(View.VISIBLE); error.setText(lastError);
                     });
                 }
             });

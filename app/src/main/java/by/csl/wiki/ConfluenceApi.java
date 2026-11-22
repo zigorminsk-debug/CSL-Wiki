@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public final class ConfluenceApi {
+    interface ConnectionFactory { HttpURLConnection open(String address) throws Exception; }
     public interface Cookies { String get(String url); default void set(String url, String value) {} }
     public static final class Failure extends Exception {
         public final int status;
@@ -36,9 +37,13 @@ public final class ConfluenceApi {
     private final String base;
     private final Cookies cookies;
     private final String userAgent;
+    private final ConnectionFactory connections;
     public ConfluenceApi(String base, Cookies cookies) { this(base, cookies, "CSLWiki-Android/0.1"); }
     public ConfluenceApi(String base, Cookies cookies, String userAgent) {
-        this.base = SitePolicy.normalizeBase(base); this.cookies = cookies; this.userAgent = userAgent;
+        this(base, cookies, userAgent, address -> (HttpURLConnection) new URL(address).openConnection());
+    }
+    ConfluenceApi(String base, Cookies cookies, String userAgent, ConnectionFactory connections) {
+        this.base = SitePolicy.normalizeBase(base); this.cookies = cookies; this.userAgent = userAgent; this.connections = connections;
     }
     public static final class User {
         public final String name, identity;
@@ -114,7 +119,7 @@ public final class ConfluenceApi {
     }
     private JSONObject request(String path) throws Exception {
         String address = base + "/rest/api" + path;
-        HttpURLConnection connection = (HttpURLConnection) new URL(address).openConnection();
+        HttpURLConnection connection = connections.open(address);
         connection.setInstanceFollowRedirects(false);
         connection.setConnectTimeout(15000);
         connection.setReadTimeout(25000);
@@ -143,7 +148,7 @@ public final class ConfluenceApi {
     }
     public byte[] image(String address) throws Exception {
         if (!SitePolicy.isTrusted(address) || !URIPath.isImagePath(address)) throw new Failure("Недоверенный источник изображения.", 400);
-        HttpURLConnection c = (HttpURLConnection) new URL(address).openConnection();
+        HttpURLConnection c = connections.open(address);
         c.setInstanceFollowRedirects(false); c.setConnectTimeout(15000); c.setReadTimeout(25000);
         c.setRequestProperty("User-Agent", userAgent); c.setRequestProperty("Accept", "image/*");
         String cookie = cookies.get(address); if (cookie != null && !cookie.isEmpty()) c.setRequestProperty("Cookie", cookie);
