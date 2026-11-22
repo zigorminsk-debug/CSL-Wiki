@@ -35,7 +35,11 @@ public final class ConfluenceApi {
     }
     private final String base;
     private final Cookies cookies;
-    public ConfluenceApi(String base, Cookies cookies) { this.base = SitePolicy.normalizeBase(base); this.cookies = cookies; }
+    private final String userAgent;
+    public ConfluenceApi(String base, Cookies cookies) { this(base, cookies, "CSLWiki-Android/0.1"); }
+    public ConfluenceApi(String base, Cookies cookies, String userAgent) {
+        this.base = SitePolicy.normalizeBase(base); this.cookies = cookies; this.userAgent = userAgent;
+    }
     public static final class User {
         public final String name, identity;
         User(String name, String identity) { this.name = name; this.identity = identity; }
@@ -115,7 +119,8 @@ public final class ConfluenceApi {
         connection.setConnectTimeout(15000);
         connection.setReadTimeout(25000);
         connection.setRequestProperty("Accept", "application/json");
-        connection.setRequestProperty("User-Agent", "CSLWiki-Android/0.1");
+        connection.setRequestProperty("User-Agent", userAgent);
+        connection.setRequestProperty("Referer", base + "/");
         connection.setUseCaches(false);
         String cookie = cookies.get(address);
         if (cookie != null && !cookie.isEmpty()) connection.setRequestProperty("Cookie", cookie);
